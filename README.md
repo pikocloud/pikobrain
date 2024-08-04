@@ -17,6 +17,7 @@ restrict for commercial or any other usage.
 
 Providers
 
+- [x] OpenAI
 - [ ] AWS Bedrock
 - [ ] Ollama
 
@@ -31,13 +32,14 @@ Integration
 
 Functions
 
+- [x] OpenAPI (including automatic reload)
 - [ ] Internal functions (threads)
 - [ ] Scripting functions
 
 ## Installation
 
 - Source (requires go 1.22.5+) `go run github.com/pikocloud/pikobrain@latest <args>`
-- Binary in [releases](releases)
+- Binary in [releases](https://github.com/pikocloud/pikobrain/releases/latest)
 - Docker `ghcr.io/pikocloud/pikobrain`
 
 ## Usage
