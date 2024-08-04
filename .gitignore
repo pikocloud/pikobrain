@@ -1,0 +1,7 @@
+.idea
+.vscode
+dist
+build
+*.tar.gz
+dist/
+.env

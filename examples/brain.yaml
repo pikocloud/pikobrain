@@ -1,0 +1,36 @@
+---
+# API provider. Currently supported only openai
+# Default is openai
+provider: openai
+# API URL.
+# Default for openai: https://api.openai.com/v1
+url: "https://api.openai.com/v1"
+# Auth token can be set inline
+# or via environment variable
+secret:
+  # value: "inline token"
+  fromEnv: "OPENAI_TOKEN"
+# LLM model name
+# Default is gpt-4o-mini
+model: "gpt-4o-mini"
+# System prompt.
+# It's go template and can use everything from https://masterminds.github.io/sprig/ .
+# For each model run, template will be re-rendered.
+# Context:
+# - `Messages` (array of Message - see internal/providers/types)
+# - `Params` (url.Values) HTTP request params
+# Default is "You are the helpful assistant"
+prompt: |
+  You are the helpful assistant.
+  Today is {{now | date "Mon Jan 2 15:04:05 MST 2006"}}.
+# Max tokens limits number of tokens used for generating answers.
+# Default is 300
+maxTokens: 300
+# Max iterations limits number of iterations over function calls
+# Default is 2
+maxIterations: 2
+# Force JSON instructs model generate valid JSON output.
+# Important note 1: your prompt MUST include directive to generate JSON output.
+# Important note 2: set max tokens in order to avoid stuck-in-loop model.
+# Default is false.
+forceJSON: false

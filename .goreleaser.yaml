@@ -1,0 +1,55 @@
+version: 2
+project_name: pikobrain
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+
+dockers:
+  - image_templates:
+      - "ghcr.io/pikocloud/{{ .ProjectName }}:{{ .Version }}-amd64"
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/amd64"
+  - image_templates:
+      - "ghcr.io/pikocloud/{{ .ProjectName }}:{{ .Version }}-arm64v8"
+    use: buildx
+    goarch: arm64
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/arm64/v8"
+docker_manifests:
+  - name_template: "ghcr.io/pikocloud/{{ .ProjectName }}:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/pikocloud/{{ .ProjectName }}:{{ .Version }}-amd64"
+      - "ghcr.io/pikocloud/{{ .ProjectName }}:{{ .Version }}-arm64v8"
+  # alias for latest
+  - name_template: "ghcr.io/pikocloud/{{ .ProjectName }}:latest"
+    image_templates:
+      - "ghcr.io/pikocloud/{{ .ProjectName }}:{{ .Version }}-amd64"
+      - "ghcr.io/pikocloud/{{ .ProjectName }}:{{ .Version }}-arm64v8"
+  # alias for major version (x)
+  - name_template: "ghcr.io/pikocloud/{{ .ProjectName }}:{{.Major}}"
+    image_templates:
+      - "ghcr.io/pikocloud/{{ .ProjectName }}:{{ .Version }}-amd64"
+      - "ghcr.io/pikocloud/{{ .ProjectName }}:{{ .Version }}-arm64v8"
+  # alias for minor version (x.y)
+  - name_template: "ghcr.io/pikocloud/{{ .ProjectName }}:{{.Major}}.{{.Minor}}"
+    image_templates:
+      - "ghcr.io/pikocloud/{{ .ProjectName }}:{{ .Version }}-amd64"
+      - "ghcr.io/pikocloud/{{ .ProjectName }}:{{ .Version }}-arm64v8"
+      -
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"

@@ -1,0 +1,39 @@
+---
+# supports multiple documents
+# Tools that assistant can use. Currently on openapi supported.
+type: openapi
+# optional namespace to avoid tools operations clashing.
+# Default is empty.
+namespace: "petstore"
+# URL to remote OpenAPI (OAS 3+) schema
+# REQUIRED
+url: "https://petstore3.swagger.io/api/v3/openapi.json"
+# optional custom base URL if API is different then schema and servers block not enough.
+# Normally NOT needed
+# Default is empty
+baseURL: "https://petstore3.swagger.io"
+# Exclude specific operations by ID. For example health checks or readiness endpoints
+# Default is empty
+exclude: [ "healthz", "ready" ]
+# timeout for each tool call. Requires Go duration suffixes (ms, s, m, h)
+# Default is 30s.
+timeout: "30s"
+# limit on response (since it's required to be in-memory) in bytes.
+# Default is 1MiB
+maxResponse: 1048576
+# ignore unsupported operations instead of failing. just print to log and continue.
+# Default false.
+ignoreInvalidOperations: true
+# set header Accept: application/json. Just a convenient way, can be replaced by headers.
+# Default is false.
+acceptJSON: false
+# array for setting outgoing headers
+# Default is empty
+headers:
+  - # header name
+    name: "X-Example"
+    # static value
+    value: "foobar"
+  - name: "Authorization"
+    # value can be extracted from environment variables
+    fromEnv: "MY_TOKEN"
