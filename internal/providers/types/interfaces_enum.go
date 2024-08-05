@@ -25,7 +25,7 @@ const (
 	// MIMEWebp is a MIME of type webp.
 	MIMEWebp MIME = "image/webp"
 	// MIMEGif is a MIME of type gif.
-	MIMEGif MIME = "image/gi"
+	MIMEGif MIME = "image/gif"
 )
 
 var ErrInvalidMIME = errors.New("not a valid MIME")
@@ -49,7 +49,7 @@ var _MIMEValue = map[string]MIME{
 	"image/jpeg":       MIMEJpeg,
 	"image/jpg":        MIMEJpg,
 	"image/webp":       MIMEWebp,
-	"image/gi":         MIMEGif,
+	"image/gif":        MIMEGif,
 }
 
 // ParseMIME attempts to convert a string to a MIME.

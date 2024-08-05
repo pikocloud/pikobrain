@@ -14,15 +14,17 @@ type ToolProviderFunc func(ctx context.Context) ([]Tool, error)
 
 type ToolFunc func(context.Context, json.RawMessage) (Content, error)
 
-func MustTool[In any](description string, callable func(ctx context.Context, payload In) (Content, error)) Tool {
+func MustTool[In any](name string, description string, callable func(ctx context.Context, payload In) (Content, error)) Tool {
 	var inp In
 
 	sch := (&jsonschema.Reflector{
 		Anonymous:      true,
 		DoNotReference: true,
 	}).Reflect(&inp)
-
+	sch.Version = ""
+	sch.AdditionalProperties = nil
 	return &simpleTool{
+		name:        name,
 		description: description,
 		input:       sch,
 		handler: func(ctx context.Context, s json.RawMessage) (Content, error) {

@@ -1,4 +1,4 @@
-package openai_test
+package providers_test
 
 import (
 	"context"
@@ -7,15 +7,22 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/pikocloud/pikobrain/testutils"
-
+	"github.com/pikocloud/pikobrain/internal/providers/bedrock"
 	"github.com/pikocloud/pikobrain/internal/providers/openai"
 	"github.com/pikocloud/pikobrain/internal/providers/types"
+	"github.com/pikocloud/pikobrain/testutils"
 )
+
+func TestMain(m *testing.M) {
+	testutils.LoadEnv()
+	testutils.SetupLogging()
+	os.Exit(m.Run())
+}
 
 func userMessage(name string, content string) types.Message {
 	return types.Message{
@@ -28,28 +35,47 @@ func userMessage(name string, content string) types.Message {
 	}
 }
 
-func TestNew(t *testing.T) {
+func TestAWS(t *testing.T) {
+	provider, err := bedrock.New(context.TODO())
+	require.NoError(t, err)
+
+	testProvider(t, provider, types.Config{
+		Model:         "anthropic.claude-3-5-sonnet-20240620-v1:0",
+		Prompt:        "Your are the helpful assistant",
+		MaxTokens:     300,
+		MaxIterations: 2,
+	})
+}
+
+func TestOpenAI(t *testing.T) {
 	chatGPT := openai.New("https://api.openai.com/v1", os.Getenv("OPENAI_TOKEN"))
 
-	var config = types.Config{
+	testProvider(t, chatGPT, types.Config{
 		Model:         "gpt-4o-mini",
 		Prompt:        "Your are the helpful assistant",
 		MaxTokens:     300,
 		MaxIterations: 2,
-	}
+	})
+}
+
+func testProvider(t *testing.T, provider types.Provider, config types.Config) {
+	ctx, cancel := context.WithTimeout(context.TODO(), time.Minute)
+	defer cancel()
 
 	type WeatherRequest struct {
 		Planet string `json:"planet" jsonschema:"description=Planet name"`
 	}
 
 	var tools types.DynamicToolbox
-	tools.Add(types.MustTool("Get weather on any planet in realtime.", func(ctx context.Context, payload WeatherRequest) (types.Content, error) {
+	tools.Add(types.MustTool("get_weather_on_planet", "Get weather on any planet in realtime.", func(ctx context.Context, payload WeatherRequest) (types.Content, error) {
 		assert.Equal(t, "Venus", payload.Planet)
 		return types.Text("135"), nil
 	}))
+	err := tools.Update(ctx, true)
+	require.NoError(t, err)
 
 	t.Run("simple", func(t *testing.T) {
-		out, err := chatGPT.Execute(context.TODO(), &types.Request{
+		out, err := provider.Execute(ctx, &types.Request{
 			Config: config,
 			History: []types.Message{
 				userMessage("reddec", "Why sky is blue?"),
@@ -70,7 +96,7 @@ func TestNew(t *testing.T) {
 	})
 
 	t.Run("tool_call", func(t *testing.T) {
-		out, err := chatGPT.Execute(context.TODO(), &types.Request{
+		out, err := provider.Execute(ctx, &types.Request{
 			Config: config,
 			History: []types.Message{
 				userMessage("reddec", "What's temperature in Venus today?"),
@@ -99,7 +125,7 @@ func TestNew(t *testing.T) {
 		picture, err := io.ReadAll(imagRes.Body)
 		require.NoError(t, err)
 
-		out, err := chatGPT.Execute(context.TODO(), &types.Request{
+		out, err := provider.Execute(ctx, &types.Request{
 			Config: config,
 			History: []types.Message{
 				{
@@ -130,9 +156,4 @@ func TestNew(t *testing.T) {
 		t.Logf("%s", reply)
 		require.Contains(t, strings.ToLower(string(reply.Data)), "eiffel")
 	})
-}
-
-func TestMain(m *testing.M) {
-	testutils.LoadEnv()
-	os.Exit(m.Run())
 }

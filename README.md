@@ -18,7 +18,7 @@ restrict for commercial or any other usage.
 Providers
 
 - [x] OpenAI
-- [ ] AWS Bedrock
+- [x] [AWS Bedrock](#aws-bedrock)
 - [ ] Ollama
 
 State
@@ -35,6 +35,12 @@ Functions
 - [x] OpenAPI (including automatic reload)
 - [ ] Internal functions (threads)
 - [ ] Scripting functions
+
+Libraries
+
+- [ ] Python
+- [ ] Golang
+- [ ] Typescript
 
 ## Installation
 
@@ -76,7 +82,77 @@ override query parameters.
 
 Output is the response from LLM.
 
-### Examples
+### Clients
+
+<details>
+<summary>Python with async-http</summary>
+
+```python3
+import asyncio
+import io
+from dataclasses import dataclass
+from datetime import timedelta
+from typing import Literal, Iterable
+
+import aiohttp
+
+
+@dataclass(frozen=True, slots=True)
+class Message:
+    content: str | bytes | io.BytesIO
+    mime: str | None = None
+    role: Literal['assistant', "user"] | None = None
+    user: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Response:
+    content: bytes
+    mime: str
+    duration: timedelta
+    input_messages: int
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+
+
+async def request(url: str, messages: Iterable[Message]) -> Response:
+    with aiohttp.MultipartWriter('form-data') as mpwriter:
+        for message in messages:
+            headers = {}
+            if message.mime:
+                headers[aiohttp.hdrs.CONTENT_TYPE] = message.mime
+            if message.role:
+                headers['X-Role'] = message.role
+            if message.user:
+                headers['X-User'] = message.user
+
+            mpwriter.append(message.content, headers)
+
+        async with aiohttp.ClientSession() as session, session.post(url, data=mpwriter) as res:
+            assert res.ok, await res.text()
+            return Response(
+                content=await res.read(),
+                mime=res.headers.get(aiohttp.hdrs.CONTENT_TYPE),
+                duration=timedelta(seconds=float(res.headers.get('X-Run-Duration'))),
+                input_messages=int(res.headers.get('X-Run-Context')),
+                input_tokens=int(res.headers.get('X-Run-Input-Tokens')),
+                output_tokens=int(res.headers.get('X-Run-Output-Tokens')),
+                total_tokens=int(res.headers.get('X-Run-Total-Tokens')),
+            )
+
+
+async def example():
+    res = await request('http://127.0.0.1:8080', messages=[
+        Message("My name is RedDec. You name is Bot."),
+        Message("What is your and my name?"),
+    ])
+    print(res)
+```
+
+</details>
+
+#### cURL
 
 Simple
 
@@ -115,3 +191,41 @@ HTTP server configuration:
       --http.timeout=             Any request timeout (default: 30s) [$HTTP_TIMEOUT]
       --http.max-body-size=       Maximum payload size in bytes (default: 1048576) [$HTTP_MAX_BODY_SIZE]
 ```
+
+## Providers
+
+### OpenAI
+
+First-class support, everything works just fine.
+
+### AWS Bedrock
+
+> [!WARNING]  
+> Due to multiple limitations, only Claude 3+ models are working properly. Recommended multi-modal model for AWS
+> Bedrock is Anthropic Claude-3-5.
+
+Initial support.
+
+- Some models may not support system prompt.
+- Some models may not support tools.
+- Authorization is ignored (use AWS environment variables)
+- `forceJSON` is not supported (workaround: use tools)
+
+Required minimal set of environment variables
+
+    AWS_ACCESS_KEY_ID=
+    AWS_SECRET_ACCESS_KEY=
+    AWS_REGION=
+
+Please refer
+to [AWS Environment variable cheatsheet](https://docs.aws.amazon.com/sdkref/latest/guide/settings-reference.html#EVarSettings)
+for configuration.
+
+Based on [function calling feature](https://docs.aws.amazon.com/bedrock/latest/userguide/tool-use.html) the recommended
+models are:
+
+- Anthropic Claude 3 models
+- Mistral AI Mistral Large and Mistral Small
+- Cohere Command R and Command R+
+
+See list of [compatibilities](https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html)

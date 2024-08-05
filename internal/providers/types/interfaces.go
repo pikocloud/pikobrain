@@ -35,7 +35,7 @@ type Role string
 // jpeg = image/jpeg
 // jpg = image/jpg
 // webp = image/webp
-// gif = image/gi
+// gif = image/gif
 // )
 type MIME string
 
@@ -45,6 +45,14 @@ func (M MIME) IsText() bool {
 
 func (M MIME) IsImage() bool {
 	return strings.HasPrefix(string(M), "image/")
+}
+
+func (M MIME) ImageFormat() string {
+	value := strings.TrimPrefix(string(M), "image/")
+	if value == "jpg" {
+		value = "jpeg"
+	}
+	return value
 }
 
 type Content struct {
@@ -140,6 +148,9 @@ type Response struct {
 // If nothing found, empty text content returned.
 func (r *Response) Reply() Content {
 	for _, m := range r.Messages {
+		if len(m.ToolCalls) > 0 {
+			continue
+		}
 		for _, c := range m.Content {
 			return c
 		}
