@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"slices"
 	"text/template"
 
 	"github.com/pikocloud/pikobrain/internal/providers/types"
@@ -19,9 +18,6 @@ type Brain struct {
 }
 
 func (m *Brain) Run(ctx context.Context, messages []types.Message, params url.Values) (*types.Response, error) {
-	// reverse message (from oldest to newest)
-	slices.Reverse(messages)
-
 	// generate prompt
 	var prompt bytes.Buffer
 
