@@ -52,7 +52,9 @@ func (srv *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 	ctx, cancel := context.WithTimeout(request.Context(), srv.Timeout)
 	defer cancel()
 
-	res, err := srv.Brain.Run(ctx, messages, request.URL.Query())
+	started := time.Now()
+	res, err := srv.Brain.Run(ctx, messages)
+	duration := time.Since(started)
 
 	if err != nil {
 		slog.Error("Failed to execute request", "error", err)
@@ -64,14 +66,14 @@ func (srv *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 	reply := res.Reply()
 	writer.Header().Set("Content-Type", string(reply.Mime))
 	writer.Header().Set("Content-Length", strconv.Itoa(len(reply.Data)))
-	writer.Header().Set(HeaderRunDuration, strconv.FormatFloat(res.Duration.Seconds(), 'f', -1, 64))
+	writer.Header().Set(HeaderRunDuration, strconv.FormatFloat(duration.Seconds(), 'f', -1, 64))
 	writer.Header().Set(HeaderRunInputTokens, strconv.Itoa(res.TotalInputTokens()))
 	writer.Header().Set(HeaderRunOutputTokens, strconv.Itoa(res.TotalOutputTokens()))
 	writer.Header().Set(HeaderRunTotalTokens, strconv.Itoa(res.TotalTokens()))
 	writer.Header().Set(HeaderRunContext, strconv.Itoa(len(messages)))
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(reply.Data)
-	slog.Info("complete", "duration", res.Duration, "input", res.TotalInputTokens(), "output", res.TotalOutputTokens(), "total", res.TotalTokens())
+	slog.Info("complete", "duration", duration, "input", res.TotalInputTokens(), "output", res.TotalOutputTokens(), "total", res.TotalTokens())
 }
 
 func parseRequest(request *http.Request) ([]types.Message, error) {

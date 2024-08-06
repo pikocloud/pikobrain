@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -16,7 +15,7 @@ import (
 	"github.com/pikocloud/pikobrain/internal/providers/types"
 )
 
-var ErrUnknownBlockType = errors.New("unknown block type: %T")
+var ErrUnknownBlockType = errors.New("unknown block type")
 
 func New(ctx context.Context) (*Bedrock, error) {
 	sdkConfig, err := config.LoadDefaultConfig(ctx)
@@ -32,34 +31,74 @@ type Bedrock struct {
 	client *bedrockruntime.Client
 }
 
-func (bed *Bedrock) Execute(ctx context.Context, req *types.Request) (*types.Response, error) {
+func (bed *Bedrock) Invoke(ctx context.Context, config types.Config, messages []types.Message, tools []types.ToolDefinition) (*types.Invoke, error) {
 	var input = &bedrockruntime.ConverseInput{
 		ToolConfig: &types2.ToolConfiguration{},
-		ModelId:    aws.String(req.Config.Model),
+		ModelId:    aws.String(config.Model),
 		InferenceConfig: &types2.InferenceConfiguration{
-			MaxTokens: aws.Int32(int32(req.Config.MaxTokens)),
+			MaxTokens: aws.Int32(int32(config.MaxTokens)),
 		},
 	}
 
-	if req.Config.Prompt != "" {
+	if config.Prompt != "" {
 		input.System = []types2.SystemContentBlock{
-			&types2.SystemContentBlockMemberText{Value: req.Config.Prompt},
+			&types2.SystemContentBlockMemberText{Value: config.Prompt},
 		}
 	}
+	// convert input
+	var mappedMessages []types2.Message
+	for _, msg := range messages {
+		var role types2.ConversationRole
+		switch msg.Role {
+		case types.RoleAssistant, types.RoleToolCall:
+			role = types2.ConversationRoleAssistant
+		case types.RoleUser, types.RoleToolResult:
+			role = types2.ConversationRoleUser
+		}
 
+		var ct types2.ContentBlock
+
+		switch msg.Role {
+
+		case types.RoleUser, types.RoleAssistant:
+			value, err := mapUserBlock(msg.Content)
+			if err != nil {
+				return nil, fmt.Errorf("map data content: %w", err)
+			}
+			ct = value
+		case types.RoleToolCall:
+			var pd any
+			if err := json.Unmarshal(msg.Content.Data, &pd); err != nil {
+				return nil, fmt.Errorf("unmarshal tool use content: %w", err)
+			}
+			ct = &types2.ContentBlockMemberToolUse{
+				Value: types2.ToolUseBlock{
+					Input:     document.NewLazyDocument(pd),
+					Name:      aws.String(msg.ToolName),
+					ToolUseId: aws.String(msg.ToolID),
+				},
+			}
+		case types.RoleToolResult:
+			value, err := mapToolResult(msg.ToolID, msg.Content)
+			if err != nil {
+				return nil, fmt.Errorf("map result content: %w", err)
+			}
+			ct = value
+		}
+
+		mappedMessages = append(mappedMessages, types2.Message{
+			Content: []types2.ContentBlock{ct},
+			Role:    role,
+		})
+
+	}
+
+	// merge messages by role
+	// ugly dirty workaround because AWS requires always jump between user and assistant
 	var prev *types2.Message
 
-	for _, msg := range req.History {
-		content, err := mapContent(msg.Content)
-		if err != nil {
-			return nil, fmt.Errorf("map content: %w", err)
-		}
-		next := types2.Message{
-			Content: []types2.ContentBlock{content},
-			Role:    types2.ConversationRole(msg.Role),
-		}
-		// squash user messages in one
-		// ugly dirty workaround because AWS requires always jump between user and assistant
+	for _, next := range mappedMessages {
+		next := next
 		if prev != nil {
 			if prev.Role != next.Role {
 				// role changed - append
@@ -78,12 +117,10 @@ func (bed *Bedrock) Execute(ctx context.Context, req *types.Request) (*types.Res
 		input.Messages = append(input.Messages, *prev)
 	}
 
-	var toolIndex = make(map[string]types.Tool)
-	for _, tool := range req.Tools.All() {
-		toolIndex[tool.Name()] = tool
-
-		// workaround since AWS serializer doesn't support encoding/json contract
-
+	// set tools
+	for _, tool := range tools {
+		// Workaround since AWS serializer doesn't support encoding/json contract.
+		// So we need to marshal it to json, then back from json to map[string]any
 		schema, err := json.Marshal(tool.Input())
 		if err != nil {
 			return nil, fmt.Errorf("marshal tool schema: %w", err)
@@ -105,91 +142,83 @@ func (bed *Bedrock) Execute(ctx context.Context, req *types.Request) (*types.Res
 		})
 	}
 
-	var response = &types.Response{
-		Request: req,
-		Started: time.Now(),
+	// call
+	resp, err := bed.client.Converse(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("converse: %w", err)
 	}
 
-	for i := 0; i < req.Config.MaxIterations; i++ {
-
-		rawInput, err := json.Marshal(input)
-		if err != nil {
-			return nil, fmt.Errorf("marshal input: %w", err)
-		}
-		var modelMessage = types.ModelMessage{
-			Started: time.Now(),
-			Input:   rawInput,
-		}
-
-		resp, err := bed.client.Converse(ctx, input)
-		if err != nil {
-			return nil, fmt.Errorf("converse: %w", err)
-		}
-
-		modelMessage.Duration = time.Since(modelMessage.Started)
-
-		rawOutput, err := json.Marshal(resp)
-		if err != nil {
-			return nil, fmt.Errorf("marshal output: %w", err)
-		}
-		modelMessage.Output = rawOutput
-
-		modelMessage.TotalToken = int(*resp.Usage.TotalTokens)
-		modelMessage.InputToken = int(*resp.Usage.InputTokens)
-		modelMessage.OutputToken = int(*resp.Usage.OutputTokens)
-
-		v, ok := resp.Output.(*types2.ConverseOutputMemberMessage)
-		if !ok {
-			continue
-		}
-
-		out, err := callTools(ctx, v, toolIndex)
-		if err != nil {
-			return nil, fmt.Errorf("call tools: %w", err)
-		}
-
-		modelMessage.ToolCalls = out
-		input.Messages = append(input.Messages, v.Value)
-
-		for _, block := range v.Value.Content {
-			value, err := parseContent(block)
-			if errors.Is(err, ErrUnknownBlockType) {
-				continue // skip
-			}
-			if err != nil {
-				return nil, fmt.Errorf("parse content: %w", err)
-			}
-			modelMessage.Content = append(modelMessage.Content, value)
-		}
-
-		response.Messages = append(response.Messages, modelMessage)
-		if len(out) == 0 {
-			break // no need more iterations
-		}
-
-		var reply = types2.Message{Role: types2.ConversationRoleUser}
-		for _, toolResult := range out {
-			outContent, err := mapResult(toolResult.Output)
-			if err != nil {
-				return nil, fmt.Errorf("map content: %w", err)
-			}
-			reply.Content = append(reply.Content, &types2.ContentBlockMemberToolResult{
-				Value: types2.ToolResultBlock{
-					Content:   []types2.ToolResultContentBlock{outContent},
-					ToolUseId: aws.String(toolResult.ID),
-				},
-			})
-		}
-
-		// add responses to context
-		input.Messages = append(input.Messages, reply)
+	// map output
+	output, err := mapOutput(resp)
+	if err != nil {
+		return nil, fmt.Errorf("map output: %w", err)
 	}
-
-	response.Duration = time.Since(response.Started)
-	return response, nil
+	return &types.Invoke{
+		Output:      output,
+		TotalToken:  int(*resp.Usage.TotalTokens),
+		InputToken:  int(*resp.Usage.InputTokens),
+		OutputToken: int(*resp.Usage.OutputTokens),
+	}, nil
 }
 
-func mapContent(content types.Content) (types2.ContentBlock, error) {
+func mapOutput(resp *bedrockruntime.ConverseOutput) ([]types.Message, error) {
+	switch v := resp.Output.(type) {
+	case *types2.ConverseOutputMemberMessage:
+		if v == nil {
+			return nil, nil
+		}
+		var ct = make([]types.Message, 0, len(v.Value.Content))
+		for _, block := range v.Value.Content {
+			switch item := block.(type) {
+			case *types2.ContentBlockMemberToolUse:
+				payload, err := item.Value.Input.MarshalSmithyDocument()
+				if err != nil {
+					return nil, fmt.Errorf("unmarshal input for tool %q: %w", *item.Value.Name, err)
+				}
+				ct = append(ct, types.Message{
+					Role:     types.RoleToolCall,
+					ToolName: *item.Value.Name,
+					ToolID:   *item.Value.ToolUseId,
+					Content: types.Content{
+						Data: payload,
+						Mime: types.MIMEJson,
+					},
+				})
+			case *types2.ContentBlockMemberText:
+				ct = append(ct, types.Message{
+					Role:    types.RoleAssistant,
+					Content: types.Text(item.Value),
+				})
+			case *types2.ContentBlockMemberImage:
+				ct = append(ct, types.Message{
+					Role: types.RoleAssistant,
+					Content: types.Content{
+						Data: item.Value.Source.(*types2.ImageSourceMemberBytes).Value,
+						Mime: types.MIME("image/" + item.Value.Format),
+					},
+				})
+			}
+		}
+		return ct, nil
+	default:
+		return nil, fmt.Errorf("%T: %w", v, ErrUnknownBlockType)
+	}
+}
+
+func mapToolResult(id string, content types.Content) (types2.ContentBlock, error) {
+	value, err := mapResult(content)
+	if err != nil {
+		return nil, fmt.Errorf("map result content: %w", err)
+	}
+	return &types2.ContentBlockMemberToolResult{
+		Value: types2.ToolResultBlock{
+			Content:   []types2.ToolResultContentBlock{value},
+			ToolUseId: aws.String(id),
+		},
+	}, nil
+}
+
+func mapUserBlock(content types.Content) (types2.ContentBlock, error) {
 	switch {
 	case content.Mime.IsText():
 		return &types2.ContentBlockMemberText{Value: string(content.Data)}, nil
@@ -201,7 +230,7 @@ func mapContent(content types.Content) (types2.ContentBlock, error) {
 			Source: &types2.ImageSourceMemberBytes{Value: content.Data},
 		}}, nil
 	}
-	return nil, fmt.Errorf("unknown mime: %s", content.Mime)
+	return nil, fmt.Errorf("unknown mime type: %s", content.Mime)
 }
 
 func mapResult(content types.Content) (types2.ToolResultContentBlock, error) {
@@ -218,54 +247,4 @@ func mapResult(content types.Content) (types2.ToolResultContentBlock, error) {
 		}}, nil
 	}
 	return nil, fmt.Errorf("unknown mime: %s", content.Mime)
-}
-
-func parseContent(block types2.ContentBlock) (types.Content, error) {
-	switch item := block.(type) {
-	case *types2.ContentBlockMemberText:
-		return types.Text(item.Value), nil
-	case *types2.ContentBlockMemberImage:
-		return types.Content{
-			Data: item.Value.Source.(*types2.ImageSourceMemberBytes).Value,
-			Mime: types.MIME("image/" + item.Value.Format),
-		}, nil
-	}
-	return types.Content{}, fmt.Errorf("block type: %T: %w", block, ErrUnknownBlockType)
-}
-
-func callTools(ctx context.Context, message *types2.ConverseOutputMemberMessage, tools map[string]types.Tool) ([]types.ToolCall, error) {
-	var ans []types.ToolCall
-	for _, block := range message.Value.Content {
-		it, ok := block.(*types2.ContentBlockMemberToolUse)
-		if !ok {
-			continue
-		}
-
-		tool, ok := tools[*it.Value.Name]
-		if !ok {
-			return nil, fmt.Errorf("tool %q not found", *it.Value.Name)
-		}
-
-		payload, err := it.Value.Input.MarshalSmithyDocument()
-		if err != nil {
-			return nil, fmt.Errorf("unmarshal input for tool %q: %w", *it.Value.Name, err)
-		}
-
-		s := time.Now()
-		res, err := tool.Call(ctx, payload)
-		if err != nil {
-			return nil, fmt.Errorf("call tool %q: %w", *it.Value.Name, err)
-		}
-
-		ans = append(ans, types.ToolCall{
-			ID:       *it.Value.ToolUseId,
-			ToolName: *it.Value.Name,
-			Started:  s,
-			Duration: time.Since(s),
-			Input:    payload,
-			Output:   res,
-		})
-	}
-
-	return ans, nil
 }

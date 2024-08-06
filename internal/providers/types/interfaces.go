@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -13,7 +14,25 @@ import (
 //go:generate go run github.com/abice/go-enum@v0.6.0
 
 type Toolbox interface {
-	All() []Tool
+	Snapshot() Snapshot
+}
+
+type Snapshot map[string]Tool
+
+func (s Snapshot) Definitions() []ToolDefinition {
+	var ans = make([]ToolDefinition, 0, len(s))
+	for _, tool := range s {
+		ans = append(ans, tool)
+	}
+	return ans
+}
+
+func (s Snapshot) Call(ctx context.Context, name string, args json.RawMessage) (Content, error) {
+	f, ok := s[name]
+	if !ok {
+		return Content{}, fmt.Errorf("no such tool %q", name)
+	}
+	return f.Call(ctx, args)
 }
 
 type Tool interface {
@@ -24,7 +43,7 @@ type Tool interface {
 }
 
 // Role for each message.
-// ENUM(user,assistant)
+// ENUM(user,assistant,toolCall,toolResult)
 type Role string
 
 // MIME for each message.
@@ -97,9 +116,11 @@ func ParseDataURL(data string) Content {
 }
 
 type Message struct {
-	Role Role
-	User string
-	Content
+	ToolID   string
+	ToolName string
+	Role     Role
+	User     string
+	Content  Content
 }
 
 type ToolCall struct {
@@ -124,11 +145,10 @@ type ModelMessage struct {
 }
 
 type Config struct {
-	Model         string `json:"model" yaml:"model"`
-	Prompt        string `json:"prompt" yaml:"prompt"`
-	MaxTokens     int    `json:"max_tokens" yaml:"maxTokens"`
-	MaxIterations int    `json:"max_iterations" yaml:"maxIterations"`
-	ForceJSON     bool   `json:"force_json" yaml:"forceJSON"`
+	Model     string `json:"model" yaml:"model"`
+	Prompt    string `json:"prompt" yaml:"prompt"`
+	MaxTokens int    `json:"max_tokens" yaml:"maxTokens"`
+	ForceJSON bool   `json:"force_json" yaml:"forceJSON"`
 }
 
 type Request struct {
@@ -144,61 +164,30 @@ type Response struct {
 	Messages []ModelMessage
 }
 
-// Reply returns first non-tool calling model response.
-// If nothing found, empty text content returned.
-func (r *Response) Reply() Content {
-	for _, m := range r.Messages {
-		if len(m.ToolCalls) > 0 {
-			continue
-		}
-		for _, c := range m.Content {
-			return c
-		}
-	}
-	return Text("")
+type ToolDefinition interface {
+	Name() string
+	Description() string
+	Input() *jsonschema.Schema
 }
 
-// TotalInputTokens returns sum of all used input tokens.
-func (r *Response) TotalInputTokens() int {
-	var sum int
-	for _, msg := range r.Messages {
-		sum += msg.InputToken
-	}
-	return sum
+type Invoke struct {
+	Output      []Message
+	InputToken  int
+	OutputToken int
+	TotalToken  int
 }
 
-// TotalOutputTokens returns sum of all used output tokens.
-func (r *Response) TotalOutputTokens() int {
-	var sum int
-	for _, msg := range r.Messages {
-		sum += msg.OutputToken
-	}
-	return sum
-}
-
-// TotalTokens returns sum of all  tokens.
-func (r *Response) TotalTokens() int {
-	var sum int
-	for _, msg := range r.Messages {
-		sum += msg.TotalToken
-	}
-	return sum
-}
-
-// Called returns how many times function (tool) with specified name has been called.
-func (r *Response) Called(name string) int {
-	var count int
-	for _, m := range r.Messages {
-		for _, t := range m.ToolCalls {
-			if t.ToolName == name {
-				count++
-			}
+func (inv *Invoke) ToolCalls() []Message {
+	var ans []Message
+	for _, m := range inv.Output {
+		if m.Role == RoleToolCall {
+			ans = append(ans, m)
 		}
 	}
-	return count
+	return ans
 }
 
-// Provider to LLM. Should loop over tools by itself.
+// Provider to LLM. Should NOT call tools by it self.
 type Provider interface {
-	Execute(ctx context.Context, req *Request) (*Response, error)
+	Invoke(ctx context.Context, config Config, messages []Message, tools []ToolDefinition) (*Invoke, error)
 }

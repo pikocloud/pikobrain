@@ -85,7 +85,7 @@ Output is the response from LLM.
 ### Clients
 
 <details>
-<summary>Python with async-http</summary>
+<summary>Python with aiohttp</summary>
 
 ```python3
 import asyncio

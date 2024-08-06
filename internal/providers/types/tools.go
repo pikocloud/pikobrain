@@ -79,6 +79,22 @@ type DynamicToolbox struct {
 	providers []*ToolProvider
 }
 
+func (st *DynamicToolbox) Snapshot() Snapshot {
+	var snapshot = make(Snapshot)
+
+	for _, p := range st.providers {
+		state := p.state.Load()
+		if state == nil {
+			continue
+		}
+		for _, tool := range *state {
+			snapshot[tool.Name()] = tool
+		}
+	}
+
+	return snapshot
+}
+
 // Update all providers. If strict enabled, stops on a first error.
 func (st *DynamicToolbox) Update(ctx context.Context, strict bool) error {
 	wg := pool.New().WithContext(ctx)
@@ -111,20 +127,4 @@ func (st *DynamicToolbox) Add(tools ...Tool) {
 	st.Provider(func(ctx context.Context) ([]Tool, error) {
 		return tools, nil
 	})
-}
-
-func (st *DynamicToolbox) All() []Tool {
-	var ans = make([]Tool, 0, len(st.providers))
-
-	for _, p := range st.providers {
-		state := p.state.Load()
-		if state == nil {
-			continue
-		}
-		for _, tool := range *state {
-			ans = append(ans, tool)
-		}
-	}
-
-	return ans
 }

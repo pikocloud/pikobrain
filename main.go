@@ -82,7 +82,7 @@ func (config *Config) Execute([]string) error {
 	}
 
 	slog.Info("loading brain config")
-	mind, err := brain.NewFromFile(&toolBox, config.Config)
+	mind, err := brain.NewFromFile(ctx, &toolBox, config.Config)
 	if err != nil {
 		return fmt.Errorf("load brain config: %w", err)
 	}

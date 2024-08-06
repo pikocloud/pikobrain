@@ -65,6 +65,10 @@ const (
 	RoleUser Role = "user"
 	// RoleAssistant is a Role of type assistant.
 	RoleAssistant Role = "assistant"
+	// RoleToolCall is a Role of type toolCall.
+	RoleToolCall Role = "toolCall"
+	// RoleToolResult is a Role of type toolResult.
+	RoleToolResult Role = "toolResult"
 )
 
 var ErrInvalidRole = errors.New("not a valid Role")
@@ -82,8 +86,10 @@ func (x Role) IsValid() bool {
 }
 
 var _RoleValue = map[string]Role{
-	"user":      RoleUser,
-	"assistant": RoleAssistant,
+	"user":       RoleUser,
+	"assistant":  RoleAssistant,
+	"toolCall":   RoleToolCall,
+	"toolResult": RoleToolResult,
 }
 
 // ParseRole attempts to convert a string to a Role.
