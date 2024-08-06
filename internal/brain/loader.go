@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/pikocloud/pikobrain/internal/providers/bedrock"
+	"github.com/pikocloud/pikobrain/internal/providers/ollama"
 	"github.com/pikocloud/pikobrain/internal/providers/openai"
 	"github.com/pikocloud/pikobrain/internal/providers/types"
 	"github.com/pikocloud/pikobrain/internal/utils"
@@ -20,8 +21,13 @@ var (
 	ErrProviderNotFound = errors.New("provider not found")
 )
 
+type Vision struct {
+	Model string `json:"model" yaml:"model"`
+}
+
 type Definition struct {
 	types.Config  `yaml:",inline"`    // model configuration
+	Vision        *Vision             `yaml:"vision,omitempty" json:"vision"` // separate model for vision
 	MaxIterations int                 `json:"max_iterations" yaml:"maxIterations"`
 	Provider      string              `json:"provider" yaml:"provider"` // provider name (openai, bedrock)
 	URL           string              `json:"url" yaml:"url"`           // provider URL
@@ -62,6 +68,12 @@ func New(ctx context.Context, toolbox types.Toolbox, definition Definition) (*Br
 			return nil, fmt.Errorf("new bedrock provider: %w", err)
 		}
 		provider = p
+	case "ollama":
+		p, err := ollama.New(definition.URL)
+		if err != nil {
+			return nil, fmt.Errorf("new ollama provider: %w", err)
+		}
+		provider = p
 	default:
 		return nil, fmt.Errorf("provider %q: %w", definition.Provider, ErrProviderNotFound)
 	}
@@ -72,8 +84,9 @@ func New(ctx context.Context, toolbox types.Toolbox, definition Definition) (*Br
 	}
 
 	return &Brain{
-		config:     definition.Config,
 		iterations: definition.MaxIterations,
+		vision:     definition.Vision,
+		config:     definition.Config,
 		provider:   provider,
 		prompt:     t,
 		toolbox:    toolbox,

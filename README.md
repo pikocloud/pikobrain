@@ -7,6 +7,7 @@ The key project features:
 - allows you to define model configuration
 - provides universal API regardless of LLM
 - provides actual function calling (currently OpenAPI)
+- (optionally) supports different models for Vision and text
 
 It allows set functions (RAG) without vendor lock-in.
 
@@ -17,9 +18,10 @@ restrict for commercial or any other usage.
 
 Providers
 
-- [x] OpenAI
+- [x] [OpenAI](#openai)
 - [x] [AWS Bedrock](#aws-bedrock)
-- [ ] Ollama
+- [x] [Ollama](#ollama)
+- [ ] Google
 
 State
 
@@ -197,6 +199,23 @@ HTTP server configuration:
 ### OpenAI
 
 First-class support, everything works just fine.
+
+### Ollama
+
+Requires Ollama 0.3.3+
+
+Recommended model: `llava` for vision and `mistral:instruct` for general messages (including function calling).
+
+```yaml
+model: 'mistral:instruct'
+vision:
+  model: 'llava'
+```
+
+> [!TIP]  
+> Check https://ollama.com/library for models with 'tools' and 'vision' features. The bigger model then generally
+> better.
+> For non-vision models, `instruct` kind usually better.
 
 ### AWS Bedrock
 

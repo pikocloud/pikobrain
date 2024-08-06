@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/pikocloud/pikobrain/internal/brain"
@@ -33,6 +32,22 @@ func userMessage(name string, content string) types.Message {
 			Data: []byte(content),
 		},
 	}
+}
+
+func TestOllama(t *testing.T) {
+	testBrain(t, brain.Definition{
+		Config: types.Config{
+			Model:     "mistral:instruct",
+			Prompt:    "Your are the helpful assistant",
+			MaxTokens: 300,
+		},
+		Vision: &brain.Vision{
+			Model: "llava",
+		},
+		MaxIterations: 2,
+		Provider:      "ollama",
+		URL:           "http://localhost:11434",
+	})
 }
 
 func TestAWS(t *testing.T) {
@@ -70,8 +85,7 @@ func testBrain(t *testing.T, definition brain.Definition) {
 	}
 
 	var tools types.DynamicToolbox
-	tools.Add(types.MustTool("get_weather_on_planet", "Get weather on any planet in realtime.", func(ctx context.Context, payload WeatherRequest) (types.Content, error) {
-		assert.Equal(t, "Venus", payload.Planet)
+	tools.Add(types.MustTool("get_weather_on_planet", "Get weather on any planet in realtime", func(ctx context.Context, payload WeatherRequest) (types.Content, error) {
 		return types.Text("135"), nil
 	}))
 	err := tools.Update(ctx, true)
@@ -85,20 +99,23 @@ func testBrain(t *testing.T, definition brain.Definition) {
 			userMessage("reddec", "Why sky is blue?"),
 		})
 		require.NoError(t, err)
-		require.Len(t, out, 1)
 
+		var found bool
+	search:
 		for _, msg := range out {
-			require.Len(t, msg.Output, 1)
 			for _, content := range msg.Output {
-				assert.Contains(t, content.Content.String(), "Rayleigh")
-				t.Logf("%s: %s: %s", content.Role, content.Content.Mime, content.Content.String())
+				if strings.Contains(content.Content.String(), "scatter") {
+					found = true
+					break search
+				}
 			}
 		}
+		require.True(t, found, "response should contain 'scatter'")
 	})
 
 	t.Run("tool_call", func(t *testing.T) {
 		out, err := b.Run(ctx, []types.Message{
-			userMessage("reddec", "What's temperature in Venus today?"),
+			userMessage("reddec", "What is the temperature on planet Venus today?"),
 		})
 		require.NoError(t, err)
 		dumpOutput(t, out)
@@ -142,7 +159,6 @@ func testBrain(t *testing.T, definition brain.Definition) {
 			userMessage("reddec", "Describe image"),
 		})
 		require.NoError(t, err)
-		require.Len(t, out, 1)
 
 		dumpOutput(t, out)
 

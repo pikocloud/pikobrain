@@ -12,9 +12,10 @@ import (
 )
 
 type Brain struct {
+	iterations int
+	vision     *Vision
 	prompt     *template.Template
 	config     types.Config
-	iterations int
 	provider   types.Provider
 	toolbox    types.Toolbox
 }
@@ -34,8 +35,17 @@ func (m *Brain) Run(ctx context.Context, messages []types.Message) (Response, er
 
 	tools := m.toolbox.Snapshot()
 	toolSet := tools.Definitions()
-
 	var ans Response
+
+	// if vision model set - replace all images with results from vision
+	if m.vision != nil {
+		responses, err := m.replaceImagesByDescription(ctx, messages, cfg)
+		ans = append(ans, responses...)
+		if err != nil {
+			return ans, err
+		}
+	}
+
 	for range m.iterations {
 		res, err := m.provider.Invoke(ctx, cfg, messages, toolSet)
 		if err != nil {
@@ -74,6 +84,30 @@ func (m *Brain) Run(ctx context.Context, messages []types.Message) (Response, er
 	}
 	return ans, nil
 
+}
+
+func (m *Brain) replaceImagesByDescription(ctx context.Context, messages []types.Message, cfg types.Config) (Response, error) {
+	var ans Response
+	for i, message := range messages {
+		if message.Role == types.RoleUser && message.Content.Mime.IsImage() {
+			result, err := m.provider.Invoke(ctx, types.Config{
+				Model:     m.vision.Model,
+				MaxTokens: cfg.MaxTokens,
+			}, []types.Message{message}, nil)
+			if err != nil {
+				return ans, fmt.Errorf("invoke vision model: %w", err)
+			}
+			ans = append(ans, result)
+			for _, out := range result.Output {
+				if out.Role == types.RoleAssistant {
+					messages[i] = out
+					slog.Debug("message replaced by vision model", "model", m.vision.Model, "messageIdx", i, "value", out.Content.String())
+					break
+				}
+			}
+		}
+	}
+	return ans, nil
 }
 
 type promptContext struct {

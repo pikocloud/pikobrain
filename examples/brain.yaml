@@ -1,18 +1,27 @@
 ---
-# API provider. Currently supported only openai
+# API provider. Currently supported: openai, bedrock, ollama
 # Default is openai
 provider: openai
 # API URL.
 # Default for openai: https://api.openai.com/v1
+# Use for ollama for local instance: http://localhost:11434
 url: "https://api.openai.com/v1"
 # Auth token can be set inline
 # or via environment variable
 secret:
   # value: "inline token"
   fromEnv: "OPENAI_TOKEN"
+
 # LLM model name
 # Default is gpt-4o-mini
 model: "gpt-4o-mini"
+
+# Separate LLM name for vision (images).
+# If set, image (without context) is sent to this model, and then
+# result replaces message with image.
+#vision:
+#  model: "gpt-4o-mini"
+
 # System prompt.
 # It's go template and can use everything from https://masterminds.github.io/sprig/ .
 # For each model run, template will be re-rendered.
