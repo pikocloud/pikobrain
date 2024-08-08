@@ -21,7 +21,7 @@ Providers
 - [x] [OpenAI](#openai)
 - [x] [AWS Bedrock](#aws-bedrock)
 - [x] [Ollama](#ollama)
-- [ ] Google
+- [x] [Google](#google)
 
 State
 
@@ -199,6 +199,13 @@ HTTP server configuration:
 ### OpenAI
 
 First-class support, everything works just fine.
+
+### Google
+
+First-class support, everything works just fine.
+
+> [!TIP]  
+> Probably the best API
 
 ### Ollama
 

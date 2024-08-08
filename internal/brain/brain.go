@@ -13,6 +13,7 @@ import (
 
 type Brain struct {
 	iterations int
+	parallel   bool
 	vision     *Vision
 	prompt     *template.Template
 	config     types.Config
@@ -63,7 +64,7 @@ func (m *Brain) Run(ctx context.Context, messages []types.Message) (Response, er
 		}
 
 		messages = append(messages, res.Output...)
-
+		// TODO: parallel call
 		for _, call := range calls {
 			slog.Debug("calling tool", "tool", call.ToolName, "id", call.ToolID, "input", call.Content.String())
 			started := time.Now()

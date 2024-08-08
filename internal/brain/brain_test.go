@@ -34,6 +34,19 @@ func userMessage(name string, content string) types.Message {
 	}
 }
 
+func TestGoogle(t *testing.T) {
+	testBrain(t, brain.Definition{
+		Config: types.Config{
+			Model:     "gemini-1.5-flash",
+			Prompt:    "Your are the helpful assistant",
+			MaxTokens: 300,
+		},
+		MaxIterations: 2,
+		Provider:      "google",
+		Secret:        utils.Value[string]{FromEnv: "GOOGLE_TOKEN"},
+	})
+}
+
 func TestOllama(t *testing.T) {
 	testBrain(t, brain.Definition{
 		Config: types.Config{

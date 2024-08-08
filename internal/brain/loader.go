@@ -11,11 +11,18 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/pikocloud/pikobrain/internal/providers/bedrock"
+	"github.com/pikocloud/pikobrain/internal/providers/google"
 	"github.com/pikocloud/pikobrain/internal/providers/ollama"
 	"github.com/pikocloud/pikobrain/internal/providers/openai"
 	"github.com/pikocloud/pikobrain/internal/providers/types"
 	"github.com/pikocloud/pikobrain/internal/utils"
 )
+
+//go:generate go run github.com/abice/go-enum@v0.6.0  --marshal
+
+// Provider name
+// ENUM(openai,bedrock,ollama,google)
+type Provider string
 
 var (
 	ErrProviderNotFound = errors.New("provider not found")
@@ -27,9 +34,10 @@ type Vision struct {
 
 type Definition struct {
 	types.Config  `yaml:",inline"`    // model configuration
+	Parallel      bool                `yaml:"parallel"`                       // allow parallel execution for calls
 	Vision        *Vision             `yaml:"vision,omitempty" json:"vision"` // separate model for vision
 	MaxIterations int                 `json:"max_iterations" yaml:"maxIterations"`
-	Provider      string              `json:"provider" yaml:"provider"` // provider name (openai, bedrock)
+	Provider      Provider            `json:"provider" yaml:"provider"` // provider name (openai, bedrock)
 	URL           string              `json:"url" yaml:"url"`           // provider URL
 	Secret        utils.Value[string] `json:"secret" yaml:"secret"`     // provider secret
 }
@@ -60,18 +68,24 @@ func New(ctx context.Context, toolbox types.Toolbox, definition Definition) (*Br
 	}
 
 	switch definition.Provider {
-	case "openai":
+	case ProviderOpenai:
 		provider = openai.New(definition.URL, secret)
-	case "bedrock":
+	case ProviderBedrock:
 		p, err := bedrock.New(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("new bedrock provider: %w", err)
 		}
 		provider = p
-	case "ollama":
+	case ProviderOllama:
 		p, err := ollama.New(definition.URL)
 		if err != nil {
 			return nil, fmt.Errorf("new ollama provider: %w", err)
+		}
+		provider = p
+	case ProviderGoogle:
+		p, err := google.New(ctx, secret)
+		if err != nil {
+			return nil, fmt.Errorf("new google provider: %w", err)
 		}
 		provider = p
 	default:
@@ -84,6 +98,7 @@ func New(ctx context.Context, toolbox types.Toolbox, definition Definition) (*Br
 	}
 
 	return &Brain{
+		parallel:   definition.Parallel,
 		iterations: definition.MaxIterations,
 		vision:     definition.Vision,
 		config:     definition.Config,
