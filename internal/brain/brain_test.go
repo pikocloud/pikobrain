@@ -2,9 +2,11 @@ package brain_test
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/pikocloud/pikobrain/internal/brain"
 	"github.com/pikocloud/pikobrain/internal/providers/types"
+	"github.com/pikocloud/pikobrain/internal/tools/openapi"
 	"github.com/pikocloud/pikobrain/internal/utils"
 	"github.com/pikocloud/pikobrain/testutils"
 )
@@ -106,6 +109,7 @@ func testBrain(t *testing.T, definition brain.Definition) {
 
 	b, err := brain.New(ctx, &tools, definition)
 	require.NoError(t, err)
+	_ = b
 
 	t.Run("simple", func(t *testing.T) {
 		out, err := b.Run(ctx, []types.Message{
@@ -180,6 +184,50 @@ func testBrain(t *testing.T, definition brain.Definition) {
 		t.Logf("%s", reply)
 		require.Contains(t, strings.ToLower(string(reply.Data)), "eiffel")
 	})
+
+	t.Run("petstore", func(t *testing.T) {
+		ts, err := openapi.New(ctx, openapi.Config{
+			URL:                     "https://petstore3.swagger.io/api/v3/openapi.json",
+			Timeout:                 5 * time.Second,
+			MaxResponse:             1024 * 1024,
+			IgnoreInvalidOperations: true,
+			AcceptJSON:              true,
+		})
+		require.NoError(t, err)
+
+		var petstore types.DynamicToolbox
+		petstore.Add(ts...)
+		require.NoError(t, petstore.Update(ctx, true))
+
+		b2, err := brain.New(ctx, &petstore, definition)
+		require.NoError(t, err)
+
+		out, err := b2.Run(ctx, []types.Message{
+			userMessage("reddec", "Which pet is under ID 9?"),
+		})
+		require.NoError(t, err)
+		dumpOutput(t, out)
+
+		require.Equal(t, 1, out.Called("getPetById"))
+		reply := out.Reply()
+
+		name := getActualName(ctx, 9)
+
+		var found bool
+	search:
+		for _, r := range out {
+			for _, o := range r.Output {
+				if o.Role == types.RoleAssistant {
+					found = strings.Contains(o.Content.String(), name)
+					if found {
+						break search
+					}
+				}
+			}
+		}
+		require.True(t, found, "response should contain "+name)
+		t.Logf("%s", reply)
+	})
 }
 
 func dumpOutput(t *testing.T, out brain.Response) {
@@ -188,4 +236,26 @@ func dumpOutput(t *testing.T, out brain.Response) {
 			t.Logf("%s: %s: %s", content.Role, content.Content.Mime, content.Content.String())
 		}
 	}
+}
+
+func getActualName(ctx context.Context, id int) string {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://petstore3.swagger.io/api/v3/pet/"+strconv.Itoa(id), nil)
+	if err != nil {
+		panic(err)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer res.Body.Close()
+
+	var out struct {
+		Name string `json:"name"`
+	}
+
+	err = json.NewDecoder(res.Body).Decode(&out)
+	if err != nil {
+		panic(err)
+	}
+	return out.Name
 }

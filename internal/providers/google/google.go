@@ -195,6 +195,12 @@ func mapContent(msg types.Message) (genai.Part, error) {
 }
 
 func schemaConverter(input *jsonschema.Schema) *genai.Schema {
+	if input == nil {
+		return nil
+	}
+	if input.Type == "object" && input.Properties.Len() == 0 {
+		return nil
+	}
 	var out = &genai.Schema{
 		Type:        schemaType(input.Type),
 		Format:      input.Format,
@@ -202,8 +208,21 @@ func schemaConverter(input *jsonschema.Schema) *genai.Schema {
 		Enum:        schemaEnum(input.Enum),
 		Required:    slices.Clone(input.Required),
 	}
+
+	if out.Type == genai.TypeObject {
+		out.Properties = make(map[string]*genai.Schema)
+	} else if out.Type == genai.TypeNumber {
+		out.Format = "double" // Google limitations
+	}
+
+	if out.Type == genai.TypeString {
+		out.Format = "" // no format supported for string
+	}
+
 	if n := input.Properties.Len(); n > 0 {
-		out.Properties = make(map[string]*genai.Schema, n)
+		if out.Properties == nil {
+			out.Properties = make(map[string]*genai.Schema, n)
+		}
 		for item := input.Properties.Oldest(); item != nil; item = item.Next() {
 			out.Properties[item.Key] = schemaConverter(item.Value)
 		}

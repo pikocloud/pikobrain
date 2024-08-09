@@ -214,9 +214,7 @@ func (op *operationDefinition) toolInput() (*jsonschema.Schema, error) {
 		case "path":
 			hasPath = true
 			pathObj.Properties.Set(param.Name, sch)
-			if param.Required {
-				pathObj.Required = append(pathObj.Required, param.Name)
-			}
+			pathObj.Required = append(pathObj.Required, param.Name) // path parameters are always required
 		case "query":
 			hasQuery = true
 			queryObj.Properties.Set(param.Name, sch)
@@ -462,4 +460,42 @@ func (so *schemaObject) Schema() *jsonschema.Schema {
 type paramID struct {
 	In   string
 	Name string
+}
+
+func flatten(def jsonschema.Definitions, child *jsonschema.Schema, maxDepth int) (*jsonschema.Schema, error) {
+	if child == nil {
+		return nil, nil
+	}
+	if maxDepth <= 0 {
+		return nil, errors.New("reached max depth")
+	}
+	if child.Ref != "" {
+		ref := strings.TrimPrefix(child.Ref, "#/$defs/")
+		v, ok := def[ref]
+		if !ok {
+			return nil, fmt.Errorf("%q is not a valid ref", ref)
+		}
+
+		return flatten(def, v, maxDepth-1)
+	}
+	var toUpdate = make(map[string]*jsonschema.Schema)
+	for it := child.Properties.Oldest(); it != nil; it = it.Next() {
+		v, err := flatten(def, it.Value, maxDepth-1)
+		if err != nil {
+			return nil, fmt.Errorf("resolve property %q: %w", it.Key, err)
+		}
+		toUpdate[it.Key] = v
+	}
+
+	for k, v := range toUpdate {
+		child.Properties.Set(k, v)
+	}
+
+	items, err := flatten(def, child.Items, maxDepth-1)
+	if err != nil {
+		return nil, fmt.Errorf("resolve items: %w", err)
+	}
+	child.Items = items
+
+	return child, nil
 }

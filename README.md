@@ -202,10 +202,11 @@ First-class support, everything works just fine.
 
 ### Google
 
-First-class support, everything works just fine.
+Good support. Known limitations:
 
-> [!TIP]  
-> Probably the best API
+- date-time not supported in tools
+- empty object (aka any JSON) is not supported
+- for complex schemas, `gemini-1.5-flash` may hallucinate and call with incorrect arguments. Use `gemini-1.5-pro`
 
 ### Ollama
 

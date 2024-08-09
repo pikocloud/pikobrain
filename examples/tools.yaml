@@ -15,6 +15,10 @@ baseURL: "https://petstore3.swagger.io"
 # Exclude specific operations by ID. For example health checks or readiness endpoints
 # Default is empty
 exclude: [ "healthz", "ready" ]
+# Do not flatten schema definitions.
+# Refs are supported only by small set of providers but allows to define recursive structures.
+# Defaults is false
+keepRefs: false
 # timeout for each tool call. Requires Go duration suffixes (ms, s, m, h)
 # Default is 30s.
 timeout: "30s"

@@ -22,10 +22,12 @@ import (
 const (
 	DefaultTimeout = 30 * time.Second
 	DefaultLimit   = 1024 * 1024
+	DefaultDepth   = 10
 )
 
 type Config struct {
 	Namespace               string               `json:"namespace" yaml:"namespace,omitempty"`                     // Prefix all operation with value and underscore
+	KeepRefs                bool                 `json:"keep_refs" yaml:"keepRefs,omitempty"`                      // do not flatten schema refs
 	URL                     string               `json:"url" yaml:"url"`                                           // OpenAPI url.
 	Timeout                 time.Duration        `json:"timeout" yaml:"timeout"`                                   // Request timeout.
 	MaxResponse             int                  `json:"max_response" yaml:"maxResponse"`                          // Maximum response body size in bytes.
@@ -112,6 +114,15 @@ func New(ctx context.Context, config Config) ([]types.Tool, error) {
 					continue
 				}
 				return nil, fmt.Errorf("create tool definition for %q: %w", operation.OperationID, err)
+			}
+
+			if !config.KeepRefs {
+				resolved, err := flatten(input.Definitions, input, DefaultDepth)
+				if err != nil {
+					return nil, fmt.Errorf("flatten definition %q: %w", operation.OperationID, err)
+				}
+				input = resolved
+				input.Definitions = nil
 			}
 
 			name := utils.Concat("_", config.Namespace, operation.OperationID)
