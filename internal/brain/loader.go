@@ -10,6 +10,7 @@ import (
 	"github.com/Masterminds/sprig"
 	"gopkg.in/yaml.v3"
 
+	"github.com/pikocloud/pikobrain/internal/ent"
 	"github.com/pikocloud/pikobrain/internal/providers/bedrock"
 	"github.com/pikocloud/pikobrain/internal/providers/google"
 	"github.com/pikocloud/pikobrain/internal/providers/ollama"
@@ -40,6 +41,7 @@ type Definition struct {
 	Provider      Provider            `json:"provider" yaml:"provider"` // provider name (openai, bedrock)
 	URL           string              `json:"url" yaml:"url"`           // provider URL
 	Secret        utils.Value[string] `json:"secret" yaml:"secret"`     // provider secret
+	Depth         int                 `yaml:"depth" json:"depth"`       // history depth
 }
 
 func Default() Definition {
@@ -51,6 +53,7 @@ func Default() Definition {
 			ForceJSON: false,
 		},
 		MaxIterations: 2,
+		Depth:         25,
 		Provider:      "openai",
 		URL:           "https://api.openai.com/v1",
 		Secret: utils.Value[string]{
@@ -59,7 +62,7 @@ func Default() Definition {
 	}
 }
 
-func New(ctx context.Context, toolbox types.Toolbox, definition Definition) (*Brain, error) {
+func New(ctx context.Context, db *ent.Client, toolbox types.Toolbox, definition Definition) (*Brain, error) {
 	var provider types.Provider
 
 	secret, err := definition.Secret.Get()
@@ -98,6 +101,8 @@ func New(ctx context.Context, toolbox types.Toolbox, definition Definition) (*Br
 	}
 
 	return &Brain{
+		db:         db,
+		depth:      definition.Depth,
 		parallel:   definition.Parallel,
 		iterations: definition.MaxIterations,
 		vision:     definition.Vision,
@@ -108,7 +113,7 @@ func New(ctx context.Context, toolbox types.Toolbox, definition Definition) (*Br
 	}, nil
 }
 
-func NewFromFile(ctx context.Context, toolbox types.Toolbox, file string) (*Brain, error) {
+func NewFromFile(ctx context.Context, db *ent.Client, toolbox types.Toolbox, file string) (*Brain, error) {
 	f, err := os.Open(file)
 	if err != nil {
 		return nil, fmt.Errorf("open file: %w", err)
@@ -121,5 +126,5 @@ func NewFromFile(ctx context.Context, toolbox types.Toolbox, file string) (*Brai
 		return nil, fmt.Errorf("decode file: %w", err)
 	}
 	_ = f.Close()
-	return New(ctx, toolbox, def)
+	return New(ctx, db, toolbox, def)
 }

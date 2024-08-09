@@ -25,7 +25,7 @@ Providers
 
 State
 
-- [ ] Threads
+- [x] [Threads](#threads)
 
 Integration
 
@@ -58,11 +58,15 @@ Binary
 
 Docker
 
-    docker run --rm -v $(pwd)/examples:/config:ro -p 8080:8080 ghcr.io/pikocloud/pikobrain
+    docker run --rm -v $(pwd):/data -v $(pwd)/examples:/config:ro -p 8080:8080 ghcr.io/pikocloud/pikobrain
 
 - Define model and tools like in [examples/](examples/)
 - Run service
 - Call service
+
+**Request**
+
+    POST http://127.0.0.1:8080
 
 Input can be:
 
@@ -83,6 +87,26 @@ Multipart payload allows caller provide full history context messages. For multi
 override query parameters.
 
 Output is the response from LLM.
+
+
+> [!INFO]  
+> User field is not used for inference. Only for audit.
+
+## Threads
+
+In addition to normal [usage](#usage), it's possible to use stateful chat context within "thread".
+
+For every request historical questions will be fetched (up to `depth`).
+
+**Add and run**
+
+    POST http://127.0.0.1:8080/<thread name>
+
+Content can be empty (just run)
+
+**Just add**
+
+    PUT http://127.0.0.1:8080/<thread name>
 
 ### Clients
 
@@ -179,6 +203,13 @@ Application Options:
 
 Debug:
       --debug.enable              Enable debug mode [$DEBUG_ENABLE]
+
+Database configuration:
+      --db.url=                   Database URL (default: sqlite://data.sqlite?cache=shared&_fk=1&_pragma=foreign_keys(1)) [$DB_URL]
+      --db.max-conn=              Maximum number of opened connections to database (default: 10) [$DB_MAX_CONN]
+      --db.idle-conn=             Maximum number of idle connections to database (default: 1) [$DB_IDLE_CONN]
+      --db.idle-timeout=          Maximum amount of time a connection may be idle (default: 0) [$DB_IDLE_TIMEOUT]
+      --db.conn-life-time=        Maximum amount of time a connection may be reused (default: 0) [$DB_CONN_LIFE_TIME]
 
 HTTP server configuration:
       --http.bind=                Bind address (default: :8080) [$HTTP_BIND]

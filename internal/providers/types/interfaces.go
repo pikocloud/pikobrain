@@ -11,7 +11,7 @@ import (
 	"github.com/invopop/jsonschema"
 )
 
-//go:generate go run github.com/abice/go-enum@v0.6.0
+//go:generate go run github.com/abice/go-enum@v0.6.0 --values --sql
 
 type Toolbox interface {
 	Snapshot() Snapshot

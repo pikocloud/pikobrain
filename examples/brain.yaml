@@ -20,8 +20,13 @@ model: "gpt-4o-mini"
 # Separate LLM name for vision (images).
 # If set, image (without context) is sent to this model, and then
 # result replaces message with image.
+# In threads, replaced value will be saved.
 #vision:
 #  model: "gpt-4o-mini"
+
+# Threads history depth. History will be truncated in a way that the first message always from user role.
+# Default 25
+depth: 25
 
 # System prompt.
 # It's go template and can use everything from https://masterminds.github.io/sprig/ .

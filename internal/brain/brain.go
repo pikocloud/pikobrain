@@ -3,17 +3,25 @@ package brain
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"text/template"
 	"time"
 
+	"entgo.io/ent/dialect/sql"
+
+	"github.com/pikocloud/pikobrain/internal/ent"
+	"github.com/pikocloud/pikobrain/internal/ent/message"
 	"github.com/pikocloud/pikobrain/internal/providers/types"
 )
 
 type Brain struct {
 	iterations int
 	parallel   bool
+	depth      int
+	db         *ent.Client
 	vision     *Vision
 	prompt     *template.Template
 	config     types.Config
@@ -21,6 +29,7 @@ type Brain struct {
 	toolbox    types.Toolbox
 }
 
+// Run model using only provided state.
 func (m *Brain) Run(ctx context.Context, messages []types.Message) (Response, error) {
 	// generate prompt
 	var prompt bytes.Buffer
@@ -40,12 +49,14 @@ func (m *Brain) Run(ctx context.Context, messages []types.Message) (Response, er
 
 	// if vision model set - replace all images with results from vision
 	if m.vision != nil {
-		responses, err := m.replaceImagesByDescription(ctx, messages, cfg)
+		responses, err := m.replaceImagesByDescription(ctx, messages)
 		ans = append(ans, responses...)
 		if err != nil {
 			return ans, err
 		}
 	}
+
+	slog.Debug("running model", "messages", len(messages), "tools", len(tools), "prompt", prompt.String())
 
 	for range m.iterations {
 		res, err := m.provider.Invoke(ctx, cfg, messages, toolSet)
@@ -84,23 +95,113 @@ func (m *Brain) Run(ctx context.Context, messages []types.Message) (Response, er
 
 	}
 	return ans, nil
-
 }
 
-func (m *Brain) replaceImagesByDescription(ctx context.Context, messages []types.Message, cfg types.Config) (Response, error) {
+func (m *Brain) Chat(ctx context.Context, thread string, messages ...types.Message) (Response, error) {
+	res, err := m.Append(ctx, thread, messages)
+	if err != nil {
+		return res, fmt.Errorf("append to thread %q: %w", thread, err)
+	}
+
+	rawHistory, err := m.db.Message.Query().Where(message.Thread(thread)).Order(message.ByID(sql.OrderDesc())).Limit(m.depth).All(ctx)
+	if err != nil {
+		return res, fmt.Errorf("query history: %w", err)
+	}
+
+	slices.Reverse(rawHistory) // from oldest to newest
+
+	// history must start from user role
+	for i, msg := range rawHistory {
+		if msg.Role == types.RoleUser {
+			rawHistory = rawHistory[i:]
+			break
+		}
+	}
+
+	var history = make([]types.Message, 0, len(rawHistory))
+	for _, msg := range rawHistory {
+		history = append(history, types.Message{
+			ToolID:   msg.ToolID,
+			ToolName: msg.ToolName,
+			Role:     msg.Role,
+			User:     msg.User,
+			Content: types.Content{
+				Data: msg.Content,
+				Mime: msg.Mime,
+			},
+		})
+	}
+	slog.Debug("running chat", "thread", thread, "raw_history", len(rawHistory), "filtered", len(history), "depth", m.depth)
+
+	exec, err := m.Run(ctx, history)
+	if err != nil {
+		return res, fmt.Errorf("run: %w", err)
+	}
+
+	saved, err := m.Append(ctx, thread, exec.Messages())
+	if err != nil {
+		return append(res, exec...), fmt.Errorf("append response to thread %q: %w", thread, err)
+	}
+
+	return slices.Concat(res, exec, saved), nil
+}
+
+// Append messages to thread.
+func (m *Brain) Append(ctx context.Context, thread string, messages []types.Message) (Response, error) {
+	messages = withoutEmptyMessages(messages)
+	if len(messages) == 0 {
+		return nil, nil
+	}
+	var res Response
+	// if vision model set - replace all images with results from vision
+	if m.vision != nil {
+		v, err := m.replaceImagesByDescription(ctx, messages)
+		if err != nil {
+			return nil, fmt.Errorf("replace images by description: %w", err)
+		}
+		res = v
+	}
+	tx, err := m.db.Tx(ctx)
+	if err != nil {
+		return res, fmt.Errorf("begin transaction: %w", err)
+	}
+
+	err = tx.Message.MapCreateBulk(messages, func(create *ent.MessageCreate, i int) {
+		msg := messages[i]
+		create.SetThread(thread).SetMime(msg.Content.Mime).SetContent(msg.Content.Data).SetRole(msg.Role)
+		if msg.User != "" {
+			create.SetUser(msg.User)
+		}
+		if msg.ToolName != "" {
+			create.SetToolName(msg.ToolName)
+		}
+		if msg.ToolID != "" {
+			create.SetToolID(msg.ToolID)
+		}
+	}).Exec(ctx)
+
+	if err != nil {
+		return res, errors.Join(tx.Rollback(), err)
+	}
+
+	return res, tx.Commit()
+}
+
+func (m *Brain) replaceImagesByDescription(ctx context.Context, messages []types.Message) (Response, error) {
 	var ans Response
-	for i, message := range messages {
-		if message.Role == types.RoleUser && message.Content.Mime.IsImage() {
+	for i, msg := range messages {
+		if msg.Role == types.RoleUser && msg.Content.Mime.IsImage() {
 			result, err := m.provider.Invoke(ctx, types.Config{
 				Model:     m.vision.Model,
-				MaxTokens: cfg.MaxTokens,
-			}, []types.Message{message}, nil)
+				MaxTokens: m.config.MaxTokens,
+			}, []types.Message{msg}, nil)
 			if err != nil {
 				return ans, fmt.Errorf("invoke vision model: %w", err)
 			}
 			ans = append(ans, result)
 			for _, out := range result.Output {
 				if out.Role == types.RoleAssistant {
+					out.Role = types.RoleUser
 					messages[i] = out
 					slog.Debug("message replaced by vision model", "model", m.vision.Model, "messageIdx", i, "value", out.Content.String())
 					break
@@ -144,6 +245,15 @@ func (r Response) TotalTokens() int {
 	return sum
 }
 
+// Messages of all responses.
+func (r Response) Messages() []types.Message {
+	var ans = make([]types.Message, 0, len(r))
+	for _, inv := range r {
+		ans = append(ans, inv.Output...)
+	}
+	return ans
+}
+
 // Reply returns first non-tool calling model response.
 // If nothing found, empty text content returned.
 func (r Response) Reply() types.Content {
@@ -170,4 +280,15 @@ func (r Response) Called(name string) int {
 		}
 	}
 	return count
+}
+
+func withoutEmptyMessages(messages []types.Message) []types.Message {
+	// filter empty messages
+	var out = make([]types.Message, 0, len(messages))
+	for _, msg := range messages {
+		if len(msg.Content.Data) != 0 {
+			out = append(out, msg)
+		}
+	}
+	return out
 }

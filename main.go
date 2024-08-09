@@ -17,6 +17,7 @@ import (
 	"github.com/sourcegraph/conc/pool"
 
 	"github.com/pikocloud/pikobrain/internal/brain"
+	"github.com/pikocloud/pikobrain/internal/ent"
 	"github.com/pikocloud/pikobrain/internal/providers/types"
 	"github.com/pikocloud/pikobrain/internal/server"
 	"github.com/pikocloud/pikobrain/internal/tools/loader"
@@ -26,6 +27,7 @@ type Config struct {
 	Debug struct {
 		Enable bool `long:"enable" env:"ENABLE" description:"Enable debug mode"`
 	} `group:"Debug" namespace:"debug" env-namespace:"DEBUG"`
+	DB      ent.Config    `group:"Database configuration" namespace:"db" env-namespace:"DB"`
 	Timeout time.Duration `long:"timeout" env:"TIMEOUT" description:"LLM timeout" default:"30s"`
 	Refresh time.Duration `long:"refresh" env:"REFRESH" description:"Refresh interval for tools" default:"30s"`
 	Config  string        `long:"config" env:"CONFIG" description:"Config file" default:"brain.yaml"`
@@ -67,6 +69,11 @@ func (config *Config) Execute([]string) error {
 	defer cancel()
 
 	config.setupLogging()
+	store, err := ent.New(ctx, config.DB)
+	if err != nil {
+		return fmt.Errorf("create store: %w", err)
+	}
+	defer store.Close()
 
 	tools, err := loader.LoadFile(config.Tools)
 	if err != nil {
@@ -82,7 +89,7 @@ func (config *Config) Execute([]string) error {
 	}
 
 	slog.Info("loading brain config")
-	mind, err := brain.NewFromFile(ctx, &toolBox, config.Config)
+	mind, err := brain.NewFromFile(ctx, store, &toolBox, config.Config)
 	if err != nil {
 		return fmt.Errorf("load brain config: %w", err)
 	}
@@ -94,15 +101,18 @@ func (config *Config) Execute([]string) error {
 		Brain:   mind,
 		Timeout: config.Timeout,
 	}
-	http.Handle("/", srv)
-	http.HandleFunc("/ready", func(writer http.ResponseWriter, _ *http.Request) {
+	router := http.NewServeMux()
+	router.HandleFunc("PUT /{thread}", srv.Append)
+	router.HandleFunc("POST /{thread}", srv.Chat)
+	router.HandleFunc("POST /", srv.Run)
+	router.HandleFunc("GET /ready", func(writer http.ResponseWriter, _ *http.Request) {
 		writer.WriteHeader(http.StatusOK)
 	})
 
 	// setup HTTP server
 	httpServer := &http.Server{
 		Addr:              config.Server.Bind,
-		Handler:           config.httpLimiter(ctx, http.DefaultServeMux),
+		Handler:           config.httpLimiter(ctx, router),
 		ReadHeaderTimeout: config.Server.ReadHeaderTimeout,
 	}
 

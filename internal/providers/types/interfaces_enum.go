@@ -7,6 +7,7 @@
 package types
 
 import (
+	"database/sql/driver"
 	"errors"
 	"fmt"
 )
@@ -29,6 +30,19 @@ const (
 )
 
 var ErrInvalidMIME = errors.New("not a valid MIME")
+
+// MIMEValues returns a list of the values for MIME
+func MIMEValues() []MIME {
+	return []MIME{
+		MIMEText,
+		MIMEJson,
+		MIMEPng,
+		MIMEJpeg,
+		MIMEJpg,
+		MIMEWebp,
+		MIMEGif,
+	}
+}
 
 // String implements the Stringer interface.
 func (x MIME) String() string {
@@ -60,6 +74,46 @@ func ParseMIME(name string) (MIME, error) {
 	return MIME(""), fmt.Errorf("%s is %w", name, ErrInvalidMIME)
 }
 
+var errMIMENilPtr = errors.New("value pointer is nil") // one per type for package clashes
+
+// Scan implements the Scanner interface.
+func (x *MIME) Scan(value interface{}) (err error) {
+	if value == nil {
+		*x = MIME("")
+		return
+	}
+
+	// A wider range of scannable types.
+	// driver.Value values at the top of the list for expediency
+	switch v := value.(type) {
+	case string:
+		*x, err = ParseMIME(v)
+	case []byte:
+		*x, err = ParseMIME(string(v))
+	case MIME:
+		*x = v
+	case *MIME:
+		if v == nil {
+			return errMIMENilPtr
+		}
+		*x = *v
+	case *string:
+		if v == nil {
+			return errMIMENilPtr
+		}
+		*x, err = ParseMIME(*v)
+	default:
+		return errors.New("invalid type for MIME")
+	}
+
+	return
+}
+
+// Value implements the driver Valuer interface.
+func (x MIME) Value() (driver.Value, error) {
+	return x.String(), nil
+}
+
 const (
 	// RoleUser is a Role of type user.
 	RoleUser Role = "user"
@@ -72,6 +126,16 @@ const (
 )
 
 var ErrInvalidRole = errors.New("not a valid Role")
+
+// RoleValues returns a list of the values for Role
+func RoleValues() []Role {
+	return []Role{
+		RoleUser,
+		RoleAssistant,
+		RoleToolCall,
+		RoleToolResult,
+	}
+}
 
 // String implements the Stringer interface.
 func (x Role) String() string {
@@ -98,4 +162,44 @@ func ParseRole(name string) (Role, error) {
 		return x, nil
 	}
 	return Role(""), fmt.Errorf("%s is %w", name, ErrInvalidRole)
+}
+
+var errRoleNilPtr = errors.New("value pointer is nil") // one per type for package clashes
+
+// Scan implements the Scanner interface.
+func (x *Role) Scan(value interface{}) (err error) {
+	if value == nil {
+		*x = Role("")
+		return
+	}
+
+	// A wider range of scannable types.
+	// driver.Value values at the top of the list for expediency
+	switch v := value.(type) {
+	case string:
+		*x, err = ParseRole(v)
+	case []byte:
+		*x, err = ParseRole(string(v))
+	case Role:
+		*x = v
+	case *Role:
+		if v == nil {
+			return errRoleNilPtr
+		}
+		*x = *v
+	case *string:
+		if v == nil {
+			return errRoleNilPtr
+		}
+		*x, err = ParseRole(*v)
+	default:
+		return errors.New("invalid type for Role")
+	}
+
+	return
+}
+
+// Value implements the driver Valuer interface.
+func (x Role) Value() (driver.Value, error) {
+	return x.String(), nil
 }

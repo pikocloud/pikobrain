@@ -36,11 +36,7 @@ type Server struct {
 	Timeout time.Duration
 }
 
-func (srv *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	if request.Method != http.MethodPost {
-		writer.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
+func (srv *Server) Run(writer http.ResponseWriter, request *http.Request) {
 	messages, err := parseRequest(request)
 	if err != nil {
 		slog.Error("Failed to parse request", "error", err)
@@ -66,14 +62,88 @@ func (srv *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 	reply := res.Reply()
 	writer.Header().Set("Content-Type", string(reply.Mime))
 	writer.Header().Set("Content-Length", strconv.Itoa(len(reply.Data)))
+	setHeaders(writer, duration, res, messages)
+
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write(reply.Data)
+
+	slog.Info("complete", "duration", duration, "input", res.TotalInputTokens(), "output", res.TotalOutputTokens(), "total", res.TotalTokens())
+}
+
+func (srv *Server) Append(writer http.ResponseWriter, request *http.Request) {
+	thread := request.PathValue("thread")
+
+	messages, err := parseRequest(request)
+	if err != nil {
+		slog.Error("Failed to parse request", "error", err)
+		writer.WriteHeader(http.StatusBadRequest)
+		_, _ = writer.Write([]byte(err.Error()))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(request.Context(), srv.Timeout)
+	defer cancel()
+
+	started := time.Now()
+	res, err := srv.Brain.Append(ctx, thread, messages)
+	duration := time.Since(started)
+
+	if err != nil {
+		slog.Error("Failed to execute request", "error", err)
+		writer.WriteHeader(http.StatusInternalServerError)
+		_, _ = writer.Write([]byte(err.Error()))
+		return
+	}
+
+	// can be invoked if vision used
+	setHeaders(writer, duration, res, messages)
+	writer.WriteHeader(http.StatusNoContent)
+
+	slog.Info("added to thread", "duration", duration, "input", res.TotalInputTokens(), "output", res.TotalOutputTokens(), "total", res.TotalTokens(), "thread", thread, "messages", len(messages))
+}
+
+func (srv *Server) Chat(writer http.ResponseWriter, request *http.Request) {
+	thread := request.PathValue("thread")
+
+	messages, err := parseRequest(request)
+	if err != nil {
+		slog.Error("Failed to parse request", "error", err)
+		writer.WriteHeader(http.StatusBadRequest)
+		_, _ = writer.Write([]byte(err.Error()))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(request.Context(), srv.Timeout)
+	defer cancel()
+
+	started := time.Now()
+	res, err := srv.Brain.Chat(ctx, thread, messages...)
+	duration := time.Since(started)
+
+	if err != nil {
+		slog.Error("Failed to execute request", "error", err)
+		writer.WriteHeader(http.StatusInternalServerError)
+		_, _ = writer.Write([]byte(err.Error()))
+		return
+	}
+
+	reply := res.Reply()
+	writer.Header().Set("Content-Type", string(reply.Mime))
+	writer.Header().Set("Content-Length", strconv.Itoa(len(reply.Data)))
+	setHeaders(writer, duration, res, messages)
+
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write(reply.Data)
+
+	slog.Info("complete", "duration", duration, "input", res.TotalInputTokens(), "output", res.TotalOutputTokens(), "total", res.TotalTokens())
+}
+
+func setHeaders(writer http.ResponseWriter, duration time.Duration, res brain.Response, messages []types.Message) {
 	writer.Header().Set(HeaderRunDuration, strconv.FormatFloat(duration.Seconds(), 'f', -1, 64))
 	writer.Header().Set(HeaderRunInputTokens, strconv.Itoa(res.TotalInputTokens()))
 	writer.Header().Set(HeaderRunOutputTokens, strconv.Itoa(res.TotalOutputTokens()))
 	writer.Header().Set(HeaderRunTotalTokens, strconv.Itoa(res.TotalTokens()))
 	writer.Header().Set(HeaderRunContext, strconv.Itoa(len(messages)))
-	writer.WriteHeader(http.StatusOK)
-	_, _ = writer.Write(reply.Data)
-	slog.Info("complete", "duration", duration, "input", res.TotalInputTokens(), "output", res.TotalOutputTokens(), "total", res.TotalTokens())
 }
 
 func parseRequest(request *http.Request) ([]types.Message, error) {
