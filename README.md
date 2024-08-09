@@ -199,7 +199,7 @@ Application Options:
       --timeout=                  LLM timeout (default: 30s) [$TIMEOUT]
       --refresh=                  Refresh interval for tools (default: 30s) [$REFRESH]
       --config=                   Config file (default: brain.yaml) [$CONFIG]
-      --tools=                    Tool file (default: tools.yaml) [$TOOLS]
+      --tools=                    Tool file [$TOOLS]
 
 Debug:
       --debug.enable              Enable debug mode [$DEBUG_ENABLE]

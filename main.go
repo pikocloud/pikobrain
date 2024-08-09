@@ -31,7 +31,7 @@ type Config struct {
 	Timeout time.Duration `long:"timeout" env:"TIMEOUT" description:"LLM timeout" default:"30s"`
 	Refresh time.Duration `long:"refresh" env:"REFRESH" description:"Refresh interval for tools" default:"30s"`
 	Config  string        `long:"config" env:"CONFIG" description:"Config file" default:"brain.yaml"`
-	Tools   string        `long:"tools" env:"TOOLS" description:"Tool file" default:"tools.yaml"`
+	Tools   string        `long:"tools" env:"TOOLS" description:"Tool file"`
 	Server  struct {
 		Bind              string        `long:"bind" env:"BIND" description:"Bind address" default:":8080"`
 		TLS               bool          `long:"tls" env:"TLS" description:"Enable TLS"`
@@ -75,13 +75,16 @@ func (config *Config) Execute([]string) error {
 	}
 	defer store.Close()
 
-	tools, err := loader.LoadFile(config.Tools)
-	if err != nil {
-		return fmt.Errorf("load tools: %w", err)
-	}
-
 	var toolBox types.DynamicToolbox
-	toolBox.Provider(tools...)
+
+	if config.Tools != "" {
+		tools, err := loader.LoadFile(config.Tools)
+		if err != nil {
+			return fmt.Errorf("load tools: %w", err)
+		}
+
+		toolBox.Provider(tools...)
+	}
 
 	slog.Info("loading initial tools state...")
 	if err := toolBox.Update(ctx, true); err != nil {
