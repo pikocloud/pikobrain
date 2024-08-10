@@ -7,7 +7,7 @@ import (
 	"os"
 	"text/template"
 
-	"github.com/Masterminds/sprig"
+	"github.com/Masterminds/sprig/v3"
 	"gopkg.in/yaml.v3"
 
 	"github.com/pikocloud/pikobrain/internal/ent"
@@ -110,6 +110,7 @@ func New(ctx context.Context, db *ent.Client, toolbox types.Toolbox, definition 
 		provider:   provider,
 		prompt:     t,
 		toolbox:    toolbox,
+		definition: definition,
 	}, nil
 }
 

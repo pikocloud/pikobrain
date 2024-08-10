@@ -8,6 +8,7 @@ The key project features:
 - provides universal API regardless of LLM
 - provides actual function calling (currently OpenAPI)
 - (optionally) supports different models for Vision and text
+- Basic UI
 
 It allows set functions (RAG) without vendor lock-in.
 
@@ -63,6 +64,17 @@ Docker
 - Define model and tools like in [examples/](examples/)
 - Run service
 - Call service
+
+**Basic UI**
+
+    http://127.0.0.1:8080
+
+![Screenshot from 2024-08-10 20-13-32](https://github.com/user-attachments/assets/9d5b8ab6-0c14-45d0-ae69-face46517a56)
+
+> [!NOTE]  
+> UI designed primarily for admin tasks. For user-friendly chat experience use something
+> like [LibreChat](https://github.com/danny-avila/LibreChat)
+
 
 **Request**
 

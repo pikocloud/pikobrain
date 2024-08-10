@@ -27,15 +27,21 @@ type Brain struct {
 	config     types.Config
 	provider   types.Provider
 	toolbox    types.Toolbox
+	definition Definition
+}
+
+func (m *Brain) Definition() Definition {
+	return m.definition
 }
 
 // Run model using only provided state.
-func (m *Brain) Run(ctx context.Context, messages []types.Message) (Response, error) {
+func (m *Brain) Run(ctx context.Context, messages []types.Message, thread string) (Response, error) {
 	// generate prompt
 	var prompt bytes.Buffer
 
 	if err := m.prompt.Execute(&prompt, promptContext{
 		Messages: messages,
+		Thread:   thread,
 	}); err != nil {
 		return nil, fmt.Errorf("render prompt: %w", err)
 	}
@@ -133,7 +139,7 @@ func (m *Brain) Chat(ctx context.Context, thread string, messages ...types.Messa
 	}
 	slog.Debug("running chat", "thread", thread, "raw_history", len(rawHistory), "filtered", len(history), "depth", m.depth)
 
-	exec, err := m.Run(ctx, history)
+	exec, err := m.Run(ctx, history, thread)
 	if err != nil {
 		return res, fmt.Errorf("run: %w", err)
 	}
@@ -214,6 +220,7 @@ func (m *Brain) replaceImagesByDescription(ctx context.Context, messages []types
 
 type promptContext struct {
 	Messages []types.Message
+	Thread   string
 }
 
 type Response []*types.Invoke

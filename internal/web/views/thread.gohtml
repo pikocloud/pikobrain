@@ -1,0 +1,77 @@
+{{define "title"}}Thread {{.Thread}}{{end}}
+{{define "main"}}
+    <nav aria-label="breadcrumb mt-2 mb-2">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="..">Threads</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{.Thread}}</li>
+        </ol>
+    </nav>
+
+
+    <h1>Thread :: {{.Thread}}</h1>
+    {{range .Messages}}
+        <div class="card mb-2
+{{- if eq .Role "user"}}
+border-light
+{{- else if eq .Role "assistant"}}
+border-primary
+{{- else if eq .Role "toolCall"}}
+border-secondary
+{{- else if eq .Role "toolResult"}}
+border-success
+{{- end}}
+" id="{{.ID}}">
+            <div class="card-body">
+                <h5 class="card-title"><a href="#{{.ID}}" class="small link-dark">#{{.ID}}</a></h5>
+                {{if .User}}
+                    <h5 class="card-title">{{.User}}</h5>
+                {{end}}
+                {{if .Mime.IsImage}}
+                    <p class="card-text">
+                        <img src="{{.DataURL}}">
+                    </p>
+                {{else if eq .Mime "application/json" }}
+                    <p class="card-text">{{.Content | bytesToString | fromJson | toPrettyJson}}</p>
+                {{else if .Mime.IsText}}
+                    <p class="card-text">{{.Content | bytesToString}}</p>
+                {{else}}
+                    <p class="card-text">{{.Content | b64enc}}</p>
+                {{end}}
+                <div class="d-flex justify-content-between">
+                    <small class="text-muted">{{.Mime}}</small>
+                    <small class="text-muted">{{.Role}}</small>
+                    <small class="text-muted">{{.CreatedAt.Format "02 Jan 2006 15:04:05"}}</small>
+                </div>
+
+            </div>
+        </div>
+    {{end}}
+    <nav aria-label="Page navigation example">
+        <ul class="pagination justify-content-center">
+            {{- if .HasPrev}}
+                <li class="page-item">
+                    <a class="page-link" href="?offset={{.PrevOffset}}&limit={{.Limit}}" aria-label="Previous">
+                        <span aria-hidden="true">&laquo;</span>
+                    </a>
+                </li>
+            {{- end}}
+            {{- range .GenPages}}
+                {{- if .Empty}}
+                    <li class="page-item"><span class="page-link">...</span></li>
+                {{- else if eq .Page $.CurrentPage}}
+                    <li class="page-item active"><span class="page-link">{{.Page}}</span></li>
+                {{- else}}
+                    <li class="page-item"><a class="page-link"
+                                             href="?offset={{.Offset}}&limit={{.Limit}}">{{.Page}}</a></li>
+                {{- end}}
+            {{- end}}
+            {{- if .HasNext}}
+                <li class="page-item">
+                    <a class="page-link" href="?offset={{.NextOffset}}&limit={{.Limit}}" aria-label="Next">
+                        <span aria-hidden="true">&raquo;</span>
+                    </a>
+                </li>
+            {{- end}}
+        </ul>
+    </nav>
+{{end}}

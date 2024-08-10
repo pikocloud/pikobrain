@@ -1,0 +1,73 @@
+{{define "title"}}PikoBrain{{end}}
+{{define "info"}}
+    <div>
+        <h5>{{.name}}</h5>
+        <p class="text-light-emphasis">{{.value}}</p>
+    </div>
+{{end}}
+{{define "main"}}
+    <div class="grid row row-cols-sm-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 row-cols-xxl-5 g-2">
+        {{template "info" (dict "name" "Provider" "value" .Definition.Provider)}}
+        {{template "info" (dict "name" "History depth" "value" .Definition.Depth)}}
+        {{template "info" (dict "name" "Tool iterations" "value" .Definition.MaxIterations)}}
+
+        {{template "info" (dict "name" "Model" "value" .Definition.Model)}}
+        {{template "info" (dict "name" "Max tokens" "value" .Definition.MaxTokens)}}
+        {{template "info" (dict "name" "JSON output" "value" .Definition.ForceJSON)}}
+
+        {{with .Definition.Vision}}
+            {{template "info" (dict "name" "Vision model" "value" .Model)}}
+        {{end}}
+    </div>
+
+    {{- if .Definition.Prompt}}
+        <div class="mt-2">
+            <h3>Prompt</h3>
+            <p style="white-space: pre-wrap">{{.Definition.Prompt}}</p>
+        </div>
+    {{- end}}
+
+    {{- with .LastMessages}}
+        <div class="mt-2">
+            <h3>Last messages</h3>
+            <table class="table table-borderless">
+                <thead>
+                <tr>
+                    <th>Thread</th>
+                    <th>Time</th>
+                    <th>Role</th>
+                    <th>Message</th>
+                </tr>
+                </thead>
+                <tbody>
+                {{- range .}}
+                    <tr class="{{- if eq .Role "user"}}
+table-light
+{{- else if eq .Role "assistant"}}
+table-primary
+{{- else if eq .Role "toolCall"}}
+table-secondary
+{{- else if eq .Role "toolResult"}}
+table-success
+{{- end}}">
+                        <td>
+                            <a href="{{$.URL (print "/threads/" .Thread "/")}}">{{.Thread}}</a>
+                        </td>
+                        <td>{{.CreatedAt.Format "02 Jan 2006 15:04:05"}}</td>
+                        <td>{{.Role}}</td>
+                        <td>
+                            <a href="{{$.URL (print "/threads/" .Thread "/")}}#{{.ID}}">
+                                {{- if .Mime.IsText}}
+                                    {{.Content | bytesToString}}
+                                {{- else}}
+                                    <i>click to see content...</i>
+                                {{- end}}
+                            </a>
+                        </td>
+                    </tr>
+                {{- end}}
+                </tbody>
+            </table>
+        </div>
+    {{- end}}
+{{end}}

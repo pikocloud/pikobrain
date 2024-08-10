@@ -49,7 +49,7 @@ func (srv *Server) Run(writer http.ResponseWriter, request *http.Request) {
 	defer cancel()
 
 	started := time.Now()
-	res, err := srv.Brain.Run(ctx, messages)
+	res, err := srv.Brain.Run(ctx, messages, "")
 	duration := time.Since(started)
 
 	if err != nil {

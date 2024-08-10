@@ -33,6 +33,7 @@ depth: 25
 # For each model run, template will be re-rendered.
 # Context:
 # - `Messages` (array of Message - see internal/providers/types)
+# - `Thread` (string) thread name
 # Default is "You are the helpful assistant"
 prompt: |
   You are the helpful assistant.

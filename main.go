@@ -21,6 +21,7 @@ import (
 	"github.com/pikocloud/pikobrain/internal/providers/types"
 	"github.com/pikocloud/pikobrain/internal/server"
 	"github.com/pikocloud/pikobrain/internal/tools/loader"
+	"github.com/pikocloud/pikobrain/internal/web"
 )
 
 type Config struct {
@@ -32,6 +33,7 @@ type Config struct {
 	Refresh time.Duration `long:"refresh" env:"REFRESH" description:"Refresh interval for tools" default:"30s"`
 	Config  string        `long:"config" env:"CONFIG" description:"Config file" default:"brain.yaml"`
 	Tools   string        `long:"tools" env:"TOOLS" description:"Tool file"`
+	BaseURL string        `long:"base-url" env:"BASE_URL" description:"Base URL for UI"`
 	Server  struct {
 		Bind              string        `long:"bind" env:"BIND" description:"Bind address" default:":8080"`
 		TLS               bool          `long:"tls" env:"TLS" description:"Enable TLS"`
@@ -111,6 +113,16 @@ func (config *Config) Execute([]string) error {
 	router.HandleFunc("GET /ready", func(writer http.ResponseWriter, _ *http.Request) {
 		writer.WriteHeader(http.StatusOK)
 	})
+
+	// frontend
+	front, err := web.New(store, mind, config.BaseURL)
+	if err != nil {
+		return fmt.Errorf("create frontend: %w", err)
+	}
+	router.HandleFunc("GET /", front.Index)
+	router.HandleFunc("GET /threads/", front.Threads)
+	router.HandleFunc("GET /threads/{thread}/", front.Thread)
+	router.Handle("GET /static/", http.StripPrefix("/static", http.FileServerFS(web.MustStatic())))
 
 	// setup HTTP server
 	httpServer := &http.Server{

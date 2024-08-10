@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pikocloud/pikobrain/internal/brain"
+	"github.com/pikocloud/pikobrain/internal/ent"
 	"github.com/pikocloud/pikobrain/internal/providers/types"
 	"github.com/pikocloud/pikobrain/internal/tools/openapi"
 	"github.com/pikocloud/pikobrain/internal/utils"
@@ -96,6 +97,16 @@ func testBrain(t *testing.T, definition brain.Definition) {
 	ctx, cancel := context.WithTimeout(context.TODO(), time.Minute)
 	defer cancel()
 
+	db, err := ent.New(ctx, ent.Config{
+		URL:          "sqlite://:memory:?cache=shared&_fk=1&_pragma=foreign_keys(1)",
+		MaxConn:      3,
+		IdleConn:     3,
+		IdleTimeout:  time.Minute,
+		ConnLifeTime: time.Hour,
+	})
+	require.NoError(t, err)
+	defer db.Close()
+
 	type WeatherRequest struct {
 		Planet string `json:"planet" jsonschema:"description=Planet name"`
 	}
@@ -104,17 +115,17 @@ func testBrain(t *testing.T, definition brain.Definition) {
 	tools.Add(types.MustTool("get_weather_on_planet", "Get weather on any planet in realtime", func(ctx context.Context, payload WeatherRequest) (types.Content, error) {
 		return types.Text("135"), nil
 	}))
-	err := tools.Update(ctx, true)
+	err = tools.Update(ctx, true)
 	require.NoError(t, err)
 
-	b, err := brain.New(ctx, &tools, definition)
+	b, err := brain.New(ctx, db, &tools, definition)
 	require.NoError(t, err)
 	_ = b
 
 	t.Run("simple", func(t *testing.T) {
 		out, err := b.Run(ctx, []types.Message{
 			userMessage("reddec", "Why sky is blue?"),
-		})
+		}, "")
 		require.NoError(t, err)
 
 		var found bool
@@ -133,7 +144,7 @@ func testBrain(t *testing.T, definition brain.Definition) {
 	t.Run("tool_call", func(t *testing.T) {
 		out, err := b.Run(ctx, []types.Message{
 			userMessage("reddec", "What is the temperature on planet Venus today?"),
-		})
+		}, "")
 		require.NoError(t, err)
 		dumpOutput(t, out)
 
@@ -174,7 +185,7 @@ func testBrain(t *testing.T, definition brain.Definition) {
 				},
 			},
 			userMessage("reddec", "Describe image"),
-		})
+		}, "")
 		require.NoError(t, err)
 
 		dumpOutput(t, out)
@@ -199,12 +210,12 @@ func testBrain(t *testing.T, definition brain.Definition) {
 		petstore.Add(ts...)
 		require.NoError(t, petstore.Update(ctx, true))
 
-		b2, err := brain.New(ctx, &petstore, definition)
+		b2, err := brain.New(ctx, db, &petstore, definition)
 		require.NoError(t, err)
 
 		out, err := b2.Run(ctx, []types.Message{
 			userMessage("reddec", "Which pet is under ID 9?"),
-		})
+		}, "")
 		require.NoError(t, err)
 		dumpOutput(t, out)
 
