@@ -97,6 +97,7 @@ func (srv *Server) Append(writer http.ResponseWriter, request *http.Request) {
 
 	// can be invoked if vision used
 	setHeaders(writer, duration, res, messages)
+	writer.Header().Set("Hx-Redirect", ".")
 	writer.WriteHeader(http.StatusNoContent)
 
 	slog.Info("added to thread", "duration", duration, "input", res.TotalInputTokens(), "output", res.TotalOutputTokens(), "total", res.TotalTokens(), "thread", thread, "messages", len(messages))
@@ -128,6 +129,7 @@ func (srv *Server) Chat(writer http.ResponseWriter, request *http.Request) {
 	}
 
 	reply := res.Reply()
+	writer.Header().Set("Hx-Redirect", ".")
 	writer.Header().Set("Content-Type", string(reply.Mime))
 	writer.Header().Set("Content-Length", strconv.Itoa(len(reply.Data)))
 	setHeaders(writer, duration, res, messages)
@@ -204,6 +206,11 @@ func readMultipart(request *http.Request, baseUser string, baseRole types.Role) 
 		body, err := io.ReadAll(part)
 		if err != nil {
 			return nil, fmt.Errorf("read body: %w", err)
+		}
+
+		if len(body) == 0 {
+			slog.Warn("skipping empty part", "part", part.FormName())
+			continue
 		}
 
 		content, err := parsePayload(part.Header.Get("Content-Type"), body)

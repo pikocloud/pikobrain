@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"io/fs"
 	"net/url"
+	"strings"
 
 	"github.com/pikocloud/pikobrain/internal/brain"
 	"github.com/pikocloud/pikobrain/internal/ent"
@@ -32,24 +33,22 @@ type baseView struct {
 	Notifications []notification
 }
 
-func (b baseView) URL(link string, params ...any) (template.URL, error) {
+func (b baseView) URL(params ...any) (template.URL, error) {
 	u, err := url.Parse(b.BaseURL)
 	if err != nil {
 		return "", fmt.Errorf("parse base url: %w", err)
 	}
-	rel, err := url.Parse(link)
+
+	var parts []string
+	for _, p := range params {
+		parts = append(parts, url.PathEscape(fmt.Sprint(p)))
+	}
+
+	rel, err := url.Parse(strings.Join(parts, "/"))
 	if err != nil {
 		return "", fmt.Errorf("parse link: %w", err)
 	}
 	next := u.ResolveReference(rel)
-
-	if len(params) > 1 {
-		q := next.Query()
-		for i := range len(params) / 2 {
-			q.Add(fmt.Sprint(params[i*2]), fmt.Sprint(params[(i*2)+1]))
-		}
-		next.RawQuery = q.Encode()
-	}
 
 	return template.URL(next.String()), nil
 }

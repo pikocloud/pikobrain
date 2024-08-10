@@ -109,6 +109,7 @@ func (config *Config) Execute([]string) error {
 	router := http.NewServeMux()
 	router.HandleFunc("PUT /{thread}", srv.Append)
 	router.HandleFunc("POST /{thread}", srv.Chat)
+	router.HandleFunc("POST /{thread}/", srv.Chat)
 	router.HandleFunc("POST /", srv.Run)
 	router.HandleFunc("GET /ready", func(writer http.ResponseWriter, _ *http.Request) {
 		writer.WriteHeader(http.StatusOK)
@@ -122,6 +123,7 @@ func (config *Config) Execute([]string) error {
 	router.HandleFunc("GET /", front.Index)
 	router.HandleFunc("GET /threads/", front.Threads)
 	router.HandleFunc("GET /threads/{thread}/", front.Thread)
+	router.HandleFunc("DELETE /messages/{message}/", front.DeleteMessage)
 	router.Handle("GET /static/", http.StripPrefix("/static", http.FileServerFS(web.MustStatic())))
 
 	// setup HTTP server

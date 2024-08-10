@@ -2,7 +2,7 @@
 
 {{define "main"}}
     <h1>Threads</h1>
-    <ul class="list-group list-group-flush">
+    <ul class="list-group list-group-flush" hx-get="." hx-trigger="every 2s" hx-swap="innerHTML" hx-select="#threadList" id="threadList">
         {{range .Threads}}
             <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-start"
                href="{{.Thread}}/">

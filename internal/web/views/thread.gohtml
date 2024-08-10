@@ -9,43 +9,97 @@
 
 
     <h1>Thread :: {{.Thread}}</h1>
-    {{range .Messages}}
-        <div class="card mb-2
-{{- if eq .Role "user"}}
-border-light
+    <div hx-get="?offset={{$.Offset}}&limit={{$.Limit}}" hx-trigger="every 2s" hx-swap="innerHTML"
+         hx-select="#messages">
+        <table class="table table-borderless"
+               id="messages">
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Time</th>
+                <th>Role</th>
+                <th>Message</th>
+            </tr>
+            </thead>
+            <tbody>
+            {{- range .Messages}}
+                <tr id="msg-{{.ID}}" class="{{- if eq .Role "user"}}
+table-light
 {{- else if eq .Role "assistant"}}
-border-primary
+table-primary
 {{- else if eq .Role "toolCall"}}
-border-secondary
+table-secondary
 {{- else if eq .Role "toolResult"}}
-border-success
-{{- end}}
-" id="{{.ID}}">
-            <div class="card-body">
-                <h5 class="card-title"><a href="#{{.ID}}" class="small link-dark">#{{.ID}}</a></h5>
-                {{if .User}}
-                    <h5 class="card-title">{{.User}}</h5>
-                {{end}}
-                {{if .Mime.IsImage}}
-                    <p class="card-text">
-                        <img src="{{.DataURL}}">
-                    </p>
-                {{else if eq .Mime "application/json" }}
-                    <p class="card-text">{{.Content | bytesToString | fromJson | toPrettyJson}}</p>
-                {{else if .Mime.IsText}}
-                    <p class="card-text">{{.Content | bytesToString}}</p>
-                {{else}}
-                    <p class="card-text">{{.Content | b64enc}}</p>
-                {{end}}
-                <div class="d-flex justify-content-between">
-                    <small class="text-muted">{{.Mime}}</small>
-                    <small class="text-muted">{{.Role}}</small>
-                    <small class="text-muted">{{.CreatedAt.Format "02 Jan 2006 15:04:05"}}</small>
-                </div>
+table-success
+{{- end}}">
+                    <td>
+                        <div class="d-flex flex-column justify-content-between" style="height: 100%">
+                            <a href="#msg-{{.ID}}">#{{.ID}}</a>
+                            {{if .User}}
+                                <span>by {{.User}}</span>
+                            {{end}}
+                            <div class="mt-2">
+                                <button class="btn btn-sm text-danger" hx-delete="{{$.URL "messages" .ID}}/"
+                                        hx-target="#msg-{{.ID}}" hx-swap="outerHTML">
 
+                                    <svg class="bi" width="14" height="14" fill="currentColor">
+                                        <use xlink:href=" {{$.URL "static" "svg"}}/bootstrap-icons.svg#trash"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                    <td>{{.CreatedAt.Format "02 Jan 2006 15:04:05"}}</td>
+                    <td>{{.Role}}</td>
+                    <td>
+                        <div style="white-space: pre-line">
+                            {{- if .Mime.IsImage -}}
+                                <img class="img-fluid"
+                                     src="data:{{.Mime}};base64,{{.Content | bytesToString | b64enc}}">
+                            {{- else if eq .Mime "application/json" -}}
+                                {{.Content | bytesToString | fromJson | toPrettyJson}}
+                            {{- else if .Mime.IsText -}}
+                                {{.Content | bytesToString}}
+                            {{- else -}}
+                                {{.Content | b64enc}}
+                            {{- end -}}
+                        </div>
+
+                    </td>
+                </tr>
+            {{- end}}
+            </tbody>
+        </table>
+    </div>
+
+    {{- if not .HasNext}}
+        <div class="text-center" id="progress" style="visibility: hidden">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Processing...</span>
             </div>
+            <p>Processing...</p>
         </div>
-    {{end}}
+        <form method="POST" enctype="multipart/form-data" class="mt-2" action="{{$.URL $.Thread}}"
+              hx-post="{{$.URL $.Thread}}" hx-indicator="#progress">
+            <h5>Add message</h5>
+
+            <div class="mb-3">
+                <label for="file" class="form-label">Upload file</label>
+                <input class="form-control" id="file" type="file" name="_f"
+                       accept="application/json,text/plain,image/gif,image/png,image/jpeg,image/jpg,image/webp">
+                <div class="form-text">Supports JSON, text, gif, png, jpg, webp</div>
+            </div>
+            <div class="mb-3">
+                <label for="message" class="form-label">Text</label>
+                <textarea class="form-control" id="message" type="file" name="_m"></textarea>
+                <div class="form-text">Text message</div>
+            </div>
+            <button class="btn btn-primary" type="submit">Send</button>
+            <button hx-encoding="multipart/form-data" hx-put="{{$.URL $.Thread}}" class="btn btn-success" type="button">
+                Append only
+            </button>
+        </form>
+    {{- end}}
     <nav aria-label="Page navigation example">
         <ul class="pagination justify-content-center">
             {{- if .HasPrev}}
@@ -74,4 +128,11 @@ border-success
             {{- end}}
         </ul>
     </nav>
+{{end}}
+{{define "afterBody"}}
+    <style>
+        .htmx-indicator {
+            visibility: visible !important;
+        }
+    </style>
 {{end}}

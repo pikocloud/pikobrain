@@ -51,12 +51,12 @@ table-secondary
 table-success
 {{- end}}">
                         <td>
-                            <a href="{{$.URL (print "/threads/" .Thread "/")}}">{{.Thread}}</a>
+                            <a href="{{$.URL "threads" .Thread }}/">{{.Thread}}</a>
                         </td>
                         <td>{{.CreatedAt.Format "02 Jan 2006 15:04:05"}}</td>
                         <td>{{.Role}}</td>
                         <td>
-                            <a href="{{$.URL (print "/threads/" .Thread "/")}}#{{.ID}}">
+                            <a href="{{$.URL "threads" .Thread}}/#msg-{{.ID}}">
                                 {{- if .Mime.IsText}}
                                     {{.Content | bytesToString}}
                                 {{- else}}

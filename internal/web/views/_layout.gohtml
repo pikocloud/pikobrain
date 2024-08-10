@@ -4,23 +4,25 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="{{$.URL "/static/css/bootstrap.min.css"}}">
+    <link rel="stylesheet" href="{{$.URL "static" "css"}}/bootstrap.min.css">
+
     <title>{{block "title" .}}{{end}}</title>
+    <script src="{{$.URL "static" "js"}}/htmx.js"></script>
 </head>
 
 <body>
-<div class="container ">
-    <nav class="navbar navbar-expand bg-body-tertiary mb-2">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="{{$.URL "/"}}">PikoBrain</a>
-            <div class="collapse navbar-collapse">
-                <div class="navbar-nav">
-                    <a class="nav-link active" aria-current="page" href="{{$.URL "/"}}">Home</a>
-                    <a class="nav-link" href="{{$.URL "/threads/"}}">Threads</a>
-                </div>
+<nav class="navbar navbar-expand bg-body-tertiary mb-2">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="{{$.URL}}/">PikoBrain</a>
+        <div class="collapse navbar-collapse">
+            <div class="navbar-nav">
+                <a class="nav-link active" aria-current="page" href="{{$.URL}}/">Home</a>
+                <a class="nav-link" href="{{$.URL "threads"}}/">Threads</a>
             </div>
         </div>
-    </nav>
+    </div>
+</nav>
+<div class="container-xxl">
     {{if .Notifications}}
         {{range .Notifications}}
             <div class="alert alert-{{if eq .Kind "error"}}danger{{else}}{{.Kind}}{{end}} mb-2" role="alert">
@@ -36,5 +38,5 @@
     {{end}}
 </div>
 </body>
-
+{{block "afterBody" .}}{{end}}
 </html>

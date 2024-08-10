@@ -142,6 +142,22 @@ func (w *Web) Thread(res http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func (w *Web) DeleteMessage(res http.ResponseWriter, req *http.Request) {
+	id, err := strconv.Atoi(req.PathValue("message"))
+	if err != nil {
+		res.WriteHeader(http.StatusBadRequest)
+		_, _ = res.Write([]byte(err.Error()))
+		return
+	}
+	err = w.db.Message.DeleteOneID(id).Exec(req.Context())
+	if err != nil {
+		res.WriteHeader(http.StatusInternalServerError)
+		_, _ = res.Write([]byte(err.Error()))
+		return
+	}
+	res.WriteHeader(http.StatusOK)
+}
+
 func (w *Web) base() baseView {
 	return baseView{BaseURL: w.baseURL}
 }
